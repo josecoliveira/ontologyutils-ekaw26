@@ -110,7 +110,7 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
      * @param enhanceRef
      *            Use the reference ontology as a base ontology that is always
      *            included in the repair.
-     * @param powerIndex
+     * @param weakerAxiomStrategy
      *            The power index to use for selecting axioms.
      */
     public OntologyRepairWithPowerIndexes(
@@ -200,8 +200,7 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
             var axiomWeakener = getWeakener(refOntology, ontology);
             while (!isRepaired(ontology)) {
                 var currentAxioms = ontology.refutableAxioms().collect(Collectors.toSet());
-                var badAxiomCandidates = findBadAxiomCandidates(ontology);
-                var badAxiomScores = computeBadAxiomScores(badAxiomCandidates, currentAxioms);
+                var badAxiomScores = computeBadAxiomScores(currentAxioms);
                 infoMessage("Found " + badAxiomScores.size() + " possible bad axioms.");
                 infoMessage(Utils.formatPowerIndexTable("Power index values for possible bad axioms:",
                         badAxiomScores.entrySet().stream(), false));
@@ -234,14 +233,6 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
         infoMessage(Utils.formatOntologyState("Final ontology state after repair:", ontology));
     }
 
-    private List<OWLAxiom> findBadAxiomCandidates(Ontology ontology) {
-        var candidates = Utils.toList(findBadAxioms(ontology));
-        if (candidates.isEmpty()) {
-            throw new IllegalStateException("Could not find a bad axiom in ontology.");
-        }
-        return candidates;
-    }
-
     private Set<OWLAxiom> collectWeakeningCandidates(OWLAxiom axiom, AxiomWeakener weakener) {
         try {
             var weakenings = weakener.weakerAxioms(axiom).collect(Collectors.toSet());
@@ -268,9 +259,12 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
                 .getKey();
     }
 
-    private Map<OWLAxiom, Double> computeBadAxiomScores(List<OWLAxiom> candidates, Set<OWLAxiom> axioms) {
-        return candidates.stream()
-                .collect(Collectors.toMap(ax -> ax, ax -> powerIndexBadAxiom.computeScore(axioms, ax)));
+    private Map<OWLAxiom, Double> computeBadAxiomScores(Set<OWLAxiom> currentAxioms) {
+        if (currentAxioms == null || currentAxioms.isEmpty()) {
+            throw new IllegalStateException("Could not find a bad axiom in ontology.");
+        }
+        return currentAxioms.stream()
+                .collect(Collectors.toMap(ax -> ax, ax -> powerIndexBadAxiom.computeScore(currentAxioms, ax)));
     }
 
     private OWLAxiom selectBadAxiom(Map<OWLAxiom, Double> badAxiomScores) {
