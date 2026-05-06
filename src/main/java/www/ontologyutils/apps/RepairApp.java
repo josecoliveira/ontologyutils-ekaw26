@@ -48,7 +48,7 @@ public abstract class RepairApp extends App {
         }, "the file to write the result to"));
         options.add(OptionType.FLAG.create('n', "normalize", b -> normalizeSroiq = true,
                 "normalize the ontology before repair"));
-        options.add(OptionType.FLAG.create("normalize-nnf", b -> normalizeSroiq = true,
+        options.add(OptionType.FLAG.create("normalize-nnf", b -> normalizeNnf = true,
                 "normalize the ontology to NNF before repair"));
         options.add(OptionType.FLAG.create('R', "no-repair", b -> repair = false, "no not perform repair"));
         options.add(OptionType.FLAG.create('v', "verbose", b -> verbose = Integer.max(1, verbose),
