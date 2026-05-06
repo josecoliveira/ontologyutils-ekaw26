@@ -306,8 +306,8 @@ public final class Utils {
                                                boolean ascending) {
         var sb = new StringBuilder();
         sb.append("\n").append(title).append("\n");
-        sb.append(String.format("%-12s | %s%n", "Shapley", "Axiom"));
-        sb.append(String.format("%s%n", "--------------|----------------------------------------------"));
+        sb.append(String.format("%-12s | %s%n", "Value", "Axiom"));
+        sb.append(String.format("%s%n", "-------------|----------------------------------------------"));
 
         entries.sorted((e1, e2) -> {
             var cmp = Double.compare(e1.getValue(), e2.getValue());

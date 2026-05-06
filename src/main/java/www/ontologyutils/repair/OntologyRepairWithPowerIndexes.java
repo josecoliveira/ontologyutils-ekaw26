@@ -206,13 +206,9 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
                         badAxiomScores.entrySet().stream(), false));
                 var badAxiom = selectBadAxiom(badAxiomScores);
                 var weakerAxioms = collectWeakeningCandidates(badAxiom, axiomWeakener);
-                while (weakerAxioms.isEmpty()) {
-                    badAxiomScores.remove(badAxiom);
-                    if (badAxiomScores.isEmpty()) {
-                        throw new IllegalStateException("Could not find a weakenable bad axiom in ontology.");
-                    }
-                    badAxiom = selectBadAxiom(badAxiomScores);
-                    weakerAxioms = collectWeakeningCandidates(badAxiom, axiomWeakener);
+                if (weakerAxioms.isEmpty()) {
+                    throw new IllegalStateException(
+                            "Could not weaken the selected bad axiom: " + Utils.prettyPrintAxiomDL(badAxiom));
                 }
                 infoMessage("Selected the bad axiom " + Utils.prettyPrintAxiomDL(badAxiom) + ".");
 
@@ -269,9 +265,8 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
 
     private OWLAxiom selectBadAxiom(Map<OWLAxiom, Double> badAxiomScores) {
         return badAxiomScores.entrySet().stream()
-                .max(Comparator.<Map.Entry<OWLAxiom, Double>>comparingDouble(Map.Entry::getValue)
-                        .thenComparing((e1, e2) -> Utils.prettyPrintAxiomDL(e2.getKey())
-                                .compareTo(Utils.prettyPrintAxiomDL(e1.getKey()))))
+                .max(Comparator.<Map.Entry<OWLAxiom, Double>>comparingDouble(entry -> entry.getValue())
+                        .thenComparing(entry -> Utils.prettyPrintAxiomDL(entry.getKey())))
                 .orElseThrow(() -> new IllegalStateException("Could not find a bad axiom in ontology."))
                 .getKey();
     }
