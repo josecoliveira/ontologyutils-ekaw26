@@ -32,20 +32,15 @@ public class RepairComparisonExperiment extends App {
     private static final long WEAKENING_TIMEOUT_SECONDS = 300L;
     private static final long POWER_INDEX_TIMEOUT_SECONDS = 600L;
 
-    private String inputFile;
+    private List<String> inputFiles = new ArrayList<>();
     private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
-    private Path csvShapleyWeakening;
-    private Path csvWeakeningShapley;
 
     @Override
     protected List<Option<?>> appOptions() {
         var options = new ArrayList<Option<?>>(super.appOptions());
         options.add(OptionType.FILE.createDefault(file -> {
-            if (inputFile != null) {
-                throw new IllegalArgumentException("multiple input files specified");
-            }
-            inputFile = file.toString();
-        }, "the file containing the original ontology"));
+            inputFiles.add(file.toString());
+        }, "the files containing the original ontologies"));
         options.add(OptionType.options(
                 Map.of("hermit", new ReasonerFactory(),
                         "jfact", new JFactFactory(),
@@ -151,10 +146,12 @@ public class RepairComparisonExperiment extends App {
         }
     }
 
-    private void writeCsvLine(Path file, double value) {
+    private void writeCsvLine(Path file, double v1, double v2) {
         try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE)) {
-            writer.write(Double.toString(value));
+            writer.write(Double.toString(v1));
+            writer.write(",");
+            writer.write(Double.toString(v2));
             writer.newLine();
         } catch (IOException e) {
             throw Utils.panic(e);
@@ -170,87 +167,92 @@ public class RepairComparisonExperiment extends App {
             throw Utils.panic(e);
         }
 
-        // Extract ontology filename (without path and extension)
-        var ontologyFileName = new File(inputFile).getName();
-        ontologyFileName = ontologyFileName.replaceAll("\\.owl$", "");
-        csvShapleyWeakening = Path.of("output", "iic-shapley-weakening-" + ontologyFileName + ".csv");
-        csvWeakeningShapley = Path.of("output", "iic-weakening-shapley-" + ontologyFileName + ".csv");
+        if (inputFiles.isEmpty()) {
+            throw new IllegalArgumentException("No input files specified");
+        }
 
-        System.err.println("CSV output: " + csvShapleyWeakening + " and " + csvWeakeningShapley);
+        for (var input : inputFiles) {
+            // Extract ontology filename (without path and extension)
+            var ontologyFileName = new File(input).getName();
+            ontologyFileName = ontologyFileName.replaceAll("\\.owl$", "");
+            var csvFile = Path.of("output", "iic-" + ontologyFileName + ".csv");
 
-        try (var ontology = Ontology.loadOntology(inputFile, reasonerFactory)) {
-            System.err.println("Loaded...");
-            var weakeningRepair = createWeakeningRepair();
-            var powerIndexRepair = createPowerIndexRepair();
+            logMessage("Running experiments for " + input);
+            logMessage("CSV output: " + csvFile);
 
-            int successfulTrials = 0;
-            int attemptedTrials = 0;
+            try (var ontology = Ontology.loadOntology(input, reasonerFactory)) {
+                logMessage("Loaded...");
+                var weakeningRepair = createWeakeningRepair();
+                var powerIndexRepair = createPowerIndexRepair();
 
-            while (successfulTrials < TRIALS) {
-                int trialIndex = successfulTrials + 1;
-                System.err.println("Trial " + trialIndex + "/" + TRIALS);
-                var trialSeed = BASE_SEED + (attemptedTrials * 3L);
+                int successfulTrials = 0;
+                int attemptedTrials = 0;
 
-                try (var inconsistent = ontology.cloneWithSeparateCache()) {
-                    System.err.println("  Making ontology inconsistent...");
-                    makeInconsistent(inconsistent, trialSeed);
-                    boolean trialSucceeded = false;
+                while (successfulTrials < TRIALS) {
+                    int trialIndex = successfulTrials + 1;
+                    logMessage("Trial " + trialIndex + "/" + TRIALS + " (file: " + ontologyFileName + ")");
+                    var trialSeed = BASE_SEED + (attemptedTrials * 3L);
 
-                    try (var repairedOntologyWithWeakening = inconsistent.cloneWithSeparateCache()) {
-                        try {
-                            System.err.println("  Repairing with weakening (troquard2018)...");
-                            Utils.randomSeed(trialSeed + 1);
-                            applyRepairWithTimeout(weakeningRepair, repairedOntologyWithWeakening, "weakening",
-                                    WEAKENING_TIMEOUT_SECONDS);
+                    try (var inconsistent = ontology.cloneWithSeparateCache()) {
+                        logMessage("  Making ontology inconsistent...");
+                        makeInconsistent(inconsistent, trialSeed);
+                        boolean trialSucceeded = false;
 
-                            try (var repairedOntologyWithPowerIndex = inconsistent.cloneWithSeparateCache()) {
-                                try {
-                                    System.err.println("  Repairing with power indexes (troquard2018-shapley-approximate)...");
-                                    Utils.randomSeed(trialSeed + 2);
-                                    applyRepairWithTimeout(powerIndexRepair, repairedOntologyWithPowerIndex,
-                                            "power-index", POWER_INDEX_TIMEOUT_SECONDS);
+                        try (var repairedOntologyWithWeakening = inconsistent.cloneWithSeparateCache()) {
+                            try {
+                                logMessage("  Repairing with weakening (troquard2018)...");
+                                Utils.randomSeed(trialSeed + 1);
+                                applyRepairWithTimeout(weakeningRepair, repairedOntologyWithWeakening, "weakening",
+                                        WEAKENING_TIMEOUT_SECONDS);
 
-                                    var subConcepts = collectSubConcepts(repairedOntologyWithWeakening,
-                                            repairedOntologyWithPowerIndex);
-                                    var inferredWeakening = inferredAxioms(repairedOntologyWithWeakening, subConcepts);
-                                    var inferredPowerIndex = inferredAxioms(repairedOntologyWithPowerIndex,
-                                            subConcepts);
+                                try (var repairedOntologyWithPowerIndex = inconsistent.cloneWithSeparateCache()) {
+                                    try {
+                                        logMessage("  Repairing with power indexes (troquard2018-shapley-approximate)...");
+                                        Utils.randomSeed(trialSeed + 2);
+                                        applyRepairWithTimeout(powerIndexRepair, repairedOntologyWithPowerIndex,
+                                                "power-index", POWER_INDEX_TIMEOUT_SECONDS);
 
-                                    var iicShapley = Ontology.relativeInformationContent(inferredPowerIndex,
-                                            inferredWeakening);
-                                    var iicWeakening = Ontology.relativeInformationContent(inferredWeakening,
-                                            inferredPowerIndex);
+                                        var subConcepts = collectSubConcepts(repairedOntologyWithWeakening,
+                                                repairedOntologyWithPowerIndex);
+                                        var inferredWeakening = inferredAxioms(repairedOntologyWithWeakening, subConcepts);
+                                        var inferredPowerIndex = inferredAxioms(repairedOntologyWithPowerIndex,
+                                                subConcepts);
 
-                                    writeCsvLine(csvShapleyWeakening, iicShapley);
-                                    writeCsvLine(csvWeakeningShapley, iicWeakening);
+                                        var iicShapley = Ontology.relativeInformationContent(inferredPowerIndex,
+                                                inferredWeakening);
+                                        var iicWeakening = Ontology.relativeInformationContent(inferredWeakening,
+                                                inferredPowerIndex);
 
-                                    System.err.println("  IIC (Shapley wrt Weakening): " + iicShapley);
-                                    System.err.println("  IIC (Weakening wrt Shapley): " + iicWeakening);
-                                    trialSucceeded = true;
+                                        writeCsvLine(csvFile, iicShapley, iicWeakening);
 
-                                } catch (TimeoutException e) {
-                                    System.err.println("  TIMEOUT: Power index repair exceeded " + POWER_INDEX_TIMEOUT_SECONDS
-                                            + " seconds. Aborting trial and retrying.");
+                                        logMessage("  IIC (Shapley wrt Weakening): " + iicShapley);
+                                        logMessage("  IIC (Weakening wrt Shapley): " + iicWeakening);
+                                        trialSucceeded = true;
+
+                                    } catch (TimeoutException e) {
+                                        logMessage("  TIMEOUT: Power index repair exceeded " + POWER_INDEX_TIMEOUT_SECONDS
+                                                + " seconds. Aborting trial and retrying.");
+                                    }
                                 }
+                            } catch (TimeoutException e) {
+                                logMessage("  TIMEOUT: Weakening repair exceeded " + WEAKENING_TIMEOUT_SECONDS
+                                        + " seconds. Aborting trial and retrying.");
                             }
-                        } catch (TimeoutException e) {
-                            System.err.println("  TIMEOUT: Weakening repair exceeded " + WEAKENING_TIMEOUT_SECONDS
-                                    + " seconds. Aborting trial and retrying.");
+                        }
+
+                        if (trialSucceeded) {
+                            successfulTrials++;
                         }
                     }
 
-                    if (trialSucceeded) {
-                        successfulTrials++;
-                    }
+                    attemptedTrials++;
                 }
-
-                attemptedTrials++;
             }
         }
 
 
         var endTime = System.nanoTime();
-        System.err.println("Done. (" + (endTime - startTime) / 1_000_000 + " ms; " + Ontology.reasonerCalls
+        logMessage("Done. (" + (endTime - startTime) / 1_000_000 + " ms; " + Ontology.reasonerCalls
                 + " reasoner calls)");
     }
 
