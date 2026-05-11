@@ -211,8 +211,9 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
                             "Could not weaken the selected bad axiom: " + Utils.prettyPrintAxiomDL(badAxiom));
                 }
                 infoMessage("Selected the bad axiom " + Utils.prettyPrintAxiomDL(badAxiom) + ".");
-
-                var weakerAxiomScores = scoreWeakeningCandidates(weakerAxioms, currentAxioms);
+                var axiomSetWithoutBadAxiom = new HashSet<>(currentAxioms);
+                axiomSetWithoutBadAxiom.remove(badAxiom);
+                var weakerAxiomScores = scoreWeakeningCandidates(weakerAxioms, axiomSetWithoutBadAxiom);
                 infoMessage("Found " + weakerAxioms.size() + " weaker axioms.");
                 infoMessage(Utils.formatPowerIndexTable(
                         "Candidate weakenings and power index values for " + Utils.prettyPrintAxiomDL(badAxiom)
