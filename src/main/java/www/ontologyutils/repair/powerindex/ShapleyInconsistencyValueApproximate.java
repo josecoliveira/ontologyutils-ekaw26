@@ -1,6 +1,7 @@
 package www.ontologyutils.repair.powerindex;
 
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import org.semanticweb.owlapi.model.OWLAxiom;
@@ -15,8 +16,16 @@ import www.ontologyutils.toolbox.Utils;
 public class ShapleyInconsistencyValueApproximate implements PowerIndex {
     private static final int DEFAULT_APPROXIMATION_SAMPLES = 735;
     private static final long DEFAULT_APPROXIMATION_SEED = 13L;
+    private static final int PARALLEL_SAMPLING_THREADS = 6;
+    private static final ExecutorService SAMPLING_EXECUTOR = Executors.newFixedThreadPool(PARALLEL_SAMPLING_THREADS,
+            runnable -> {
+                Thread thread = new Thread(runnable);
+                thread.setName("shapley-approx-worker-" + thread.getId());
+                thread.setDaemon(true);
+                return thread;
+            });
 
-    private final Map<Set<OWLAxiom>, Integer> drasticCache;
+    private final ConcurrentMap<Set<OWLAxiom>, Integer> drasticCache;
     private final int approximationSamples;
     private final long approximationSeed;
 
@@ -41,7 +50,7 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
         if (approximationSamples <= 0) {
             throw new IllegalArgumentException("Approximation samples must be positive: " + approximationSamples);
         }
-        this.drasticCache = new HashMap<>();
+        this.drasticCache = new ConcurrentHashMap<>();
         this.approximationSamples = approximationSamples;
         this.approximationSeed = approximationSeed;
     }
@@ -68,30 +77,15 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
         universe.addAll(targets);
 
         // deterministic ordering
-        List<OWLAxiom> permutation = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+        List<OWLAxiom> orderedUniverse = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 
         Map<OWLAxiom, Double> totals = new HashMap<>();
         for (OWLAxiom t : targets) {
             totals.put(t, 0.0d);
         }
 
-        Random random = new Random(seedFor(universe, targets));
-
-        for (int i = 0; i < approximationSamples; i++) {
-            Collections.shuffle(permutation, random);
-
-            Set<OWLAxiom> prefixBase = new HashSet<>();
-            for (OWLAxiom current : permutation) {
-                if (targets.contains(current)) {
-                    Set<OWLAxiom> prefixWith = new HashSet<>(prefixBase);
-                    prefixWith.add(current);
-                    double marginal = drasticInconsistencyValue(prefixWith) - drasticInconsistencyValue(prefixBase);
-                    totals.merge(current, marginal, Double::sum);
-                } else {
-                    prefixBase.add(current);
-                }
-            }
-        }
+        long baseSeed = seedFor(universe, targets);
+        mergeTotals(totals, sampleTargetsInParallel(orderedUniverse, targets, approximationSamples, baseSeed));
 
         // average
         Map<OWLAxiom, Double> averaged = new HashMap<>();
@@ -104,7 +98,6 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
     /**
      * Adaptive scoring that samples in chunks and stops when the ranking of
      * targets stabilizes (or when maxSamples is reached).
-     *
      * This returns the latest averaged scores for all targets.
      */
     public Map<OWLAxiom, Double> computeScoresAdaptive(Set<OWLAxiom> axioms, Set<OWLAxiom> targets,
@@ -114,7 +107,6 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
 
     /**
      * Adaptive scoring with explicit ranking direction.
-     *
      * @param ascending
      *            true for smaller scores being better (weakenings), false for
      *            larger scores being better (bad axioms).
@@ -130,34 +122,20 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
 
         Set<OWLAxiom> universe = new HashSet<>(axioms);
         universe.addAll(targets);
-        List<OWLAxiom> permutation = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+        List<OWLAxiom> orderedUniverse = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 
         Map<OWLAxiom, Double> totals = new HashMap<>();
         for (OWLAxiom t : targets) {
             totals.put(t, 0.0d);
         }
 
-        Random random = new Random(seedFor(universe, targets));
+        long baseSeed = seedFor(universe, targets);
         int used = 0;
         List<OWLAxiom> previousRanking = null;
 
         while (used < maxSamples) {
             int batch = Math.min(chunkSize, maxSamples - used);
-            for (int i = 0; i < batch; i++) {
-                Collections.shuffle(permutation, random);
-
-                Set<OWLAxiom> prefixBase = new HashSet<>();
-                for (OWLAxiom current : permutation) {
-                    if (targets.contains(current)) {
-                        Set<OWLAxiom> prefixWith = new HashSet<>(prefixBase);
-                        prefixWith.add(current);
-                        double marginal = drasticInconsistencyValue(prefixWith) - drasticInconsistencyValue(prefixBase);
-                        totals.merge(current, marginal, Double::sum);
-                    } else {
-                        prefixBase.add(current);
-                    }
-                }
-            }
+            mergeTotals(totals, sampleTargetsInParallel(orderedUniverse, targets, batch, mixSeed(baseSeed, used)));
             used += batch;
 
             // compute averaged scores so far
@@ -179,7 +157,7 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
 
-            if (previousRanking != null && ranking.equals(previousRanking)) {
+            if (ranking.equals(previousRanking)) {
                 return averaged;
             }
             previousRanking = ranking;
@@ -195,25 +173,9 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
 
     private double approximateShapleyInconsistencyValue(Set<OWLAxiom> universe, OWLAxiom axiom) {
         // Sort once so seeded sampling is deterministic across JVM runs.
-        List<OWLAxiom> permutation = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
-        double totalMarginal = 0.0d;
-        Random random = new Random(seedFor(universe, axiom));
-
-        for (int i = 0; i < approximationSamples; i++) {
-            Collections.shuffle(permutation, random);
-
-            Set<OWLAxiom> prefix = new HashSet<>();
-            for (OWLAxiom current : permutation) {
-                if (current.equals(axiom)) {
-                    Set<OWLAxiom> prefixWithAxiom = new HashSet<>(prefix);
-                    prefixWithAxiom.add(axiom);
-                    totalMarginal += drasticInconsistencyValue(prefixWithAxiom) - drasticInconsistencyValue(prefix);
-                    break;
-                }
-                prefix.add(current);
-            }
-        }
-
+        List<OWLAxiom> orderedUniverse = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+        double totalMarginal = sampleSingleTargetInParallel(orderedUniverse, axiom, approximationSamples,
+                seedFor(universe, axiom));
         return totalMarginal / approximationSamples;
     }
 
@@ -237,13 +199,121 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
 
     private int drasticInconsistencyValue(Set<OWLAxiom> subset) {
         Set<OWLAxiom> key = Set.copyOf(subset);
-        Integer cached = drasticCache.get(key);
-        if (cached != null) {
-            return cached;
+        return drasticCache.computeIfAbsent(key, k -> Utils.isConsistent(k) ? 0 : 1);
+    }
+
+    private Map<OWLAxiom, Double> sampleTargetsInParallel(List<OWLAxiom> orderedUniverse, Set<OWLAxiom> targets,
+            int samples, long seed) {
+        var tasks = new ArrayList<Callable<Map<OWLAxiom, Double>>>();
+        int workers = Math.min(PARALLEL_SAMPLING_THREADS, samples);
+        int[] shares = shares(samples, workers);
+        for (int worker = 0; worker < workers; worker++) {
+            final int samplesForWorker = shares[worker];
+            final int workerIndex = worker;
+            tasks.add(() -> {
+                List<OWLAxiom> permutation = new ArrayList<>(orderedUniverse);
+                Random random = new Random(mixSeed(seed, workerIndex));
+                Map<OWLAxiom, Double> localTotals = new HashMap<>();
+                for (int i = 0; i < samplesForWorker; i++) {
+                    Collections.shuffle(permutation, random);
+
+                    Set<OWLAxiom> prefixBase = new HashSet<>();
+                    for (OWLAxiom current : permutation) {
+                        if (targets.contains(current)) {
+                            Set<OWLAxiom> prefixWith = new HashSet<>(prefixBase);
+                            prefixWith.add(current);
+                            double marginal = drasticInconsistencyValue(prefixWith) - drasticInconsistencyValue(prefixBase);
+                            localTotals.merge(current, marginal, Double::sum);
+                        } else {
+                            prefixBase.add(current);
+                        }
+                    }
+                }
+                return localTotals;
+            });
         }
-        int value = Utils.isConsistent(subset) ? 0 : 1;
-        drasticCache.put(key, value);
-        return value;
+        return mergeWorkerMaps(invokeAll(tasks));
+    }
+
+    private double sampleSingleTargetInParallel(List<OWLAxiom> orderedUniverse, OWLAxiom axiom, int samples, long seed) {
+        var tasks = new ArrayList<Callable<Double>>();
+        int workers = Math.min(PARALLEL_SAMPLING_THREADS, samples);
+        int[] shares = shares(samples, workers);
+        for (int worker = 0; worker < workers; worker++) {
+            final int samplesForWorker = shares[worker];
+            final int workerIndex = worker;
+            tasks.add(() -> {
+                List<OWLAxiom> permutation = new ArrayList<>(orderedUniverse);
+                Random random = new Random(mixSeed(seed, workerIndex));
+                double localTotal = 0.0d;
+                for (int i = 0; i < samplesForWorker; i++) {
+                    Collections.shuffle(permutation, random);
+
+                    Set<OWLAxiom> prefix = new HashSet<>();
+                    for (OWLAxiom current : permutation) {
+                        if (current.equals(axiom)) {
+                            Set<OWLAxiom> prefixWithAxiom = new HashSet<>(prefix);
+                            prefixWithAxiom.add(axiom);
+                            localTotal += drasticInconsistencyValue(prefixWithAxiom) - drasticInconsistencyValue(prefix);
+                            break;
+                        }
+                        prefix.add(current);
+                    }
+                }
+                return localTotal;
+            });
+        }
+        return invokeAll(tasks).stream().mapToDouble(Double::doubleValue).sum();
+    }
+
+    private <T> List<T> invokeAll(List<Callable<T>> tasks) {
+        try {
+            List<Future<T>> futures = SAMPLING_EXECUTOR.invokeAll(tasks);
+            List<T> results = new ArrayList<>(futures.size());
+            for (Future<T> future : futures) {
+                results.add(future.get());
+            }
+            return results;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while sampling approximate Shapley values.", ex);
+        } catch (ExecutionException ex) {
+            throw new RuntimeException("Failed to sample approximate Shapley values.", ex.getCause());
+        }
+    }
+
+    private static Map<OWLAxiom, Double> mergeWorkerMaps(List<Map<OWLAxiom, Double>> workerTotals) {
+        Map<OWLAxiom, Double> merged = new HashMap<>();
+        for (Map<OWLAxiom, Double> localTotals : workerTotals) {
+            mergeTotals(merged, localTotals);
+        }
+        return merged;
+    }
+
+    private static void mergeTotals(Map<OWLAxiom, Double> totals, Map<OWLAxiom, Double> partial) {
+        for (Map.Entry<OWLAxiom, Double> entry : partial.entrySet()) {
+            totals.merge(entry.getKey(), entry.getValue(), Double::sum);
+        }
+    }
+
+    private static int[] shares(int samples, int workers) {
+        int[] result = new int[workers];
+        int base = samples / workers;
+        int remainder = samples % workers;
+        for (int worker = 0; worker < workers; worker++) {
+            result[worker] = base + (worker < remainder ? 1 : 0);
+        }
+        return result;
+    }
+
+    private static long mixSeed(long seed, int salt) {
+        long mixed = seed ^ (0x9E3779B97F4A7C15L * (salt + 1L));
+        mixed ^= (mixed >>> 33);
+        mixed *= 0xff51afd7ed558ccdL;
+        mixed ^= (mixed >>> 33);
+        mixed *= 0xc4ceb9fe1a85ec53L;
+        mixed ^= (mixed >>> 33);
+        return mixed;
     }
 }
 
