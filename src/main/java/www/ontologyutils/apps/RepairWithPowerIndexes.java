@@ -16,8 +16,8 @@ import www.ontologyutils.toolbox.Ontology;
 public class RepairWithPowerIndexes extends RepairApp {
     private boolean coherence = false;
     private RefOntologyStrategy refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
-    private BadAxiomStrategy badAxiomStrategy = BadAxiomStrategy.SHAPLEY_EXACT;
-    private WeakerAxiomStrategy weakerAxiomStrategy = WeakerAxiomStrategy.SHAPLEY_EXACT;
+    private BadAxiomStrategy badAxiomStrategy = BadAxiomStrategy.BANZHAF_APPROXIMATE;
+    private WeakerAxiomStrategy weakerAxiomStrategy = WeakerAxiomStrategy.BANZHAF_APPROXIMATE;
     private int weakeningFlags = AxiomWeakener.FLAG_DEFAULT;
     private boolean enhanceRef = false;
 
@@ -26,11 +26,18 @@ public class RepairWithPowerIndexes extends RepairApp {
         var options = new ArrayList<Option<?>>();
         options.addAll(super.appOptions());
         options.add(OptionType.FLAG.create("coherence", b -> coherence = true, "make the ontology coherent"));
-        options.add(OptionType.FLAG.create("fast", b -> {
-            refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
+        options.add(OptionType.FLAG.create("power-index-shapley-exact", b -> {
+            badAxiomStrategy = BadAxiomStrategy.SHAPLEY_EXACT;
+            weakerAxiomStrategy = WeakerAxiomStrategy.SHAPLEY_EXACT;
+        }, "use exact Shapley value for bad and weaker axiom selection"));
+        options.add(OptionType.FLAG.create("power-index-shapley-approximate", b -> {
             badAxiomStrategy = BadAxiomStrategy.SHAPLEY_APPROXIMATE;
             weakerAxiomStrategy = WeakerAxiomStrategy.SHAPLEY_APPROXIMATE;
-        }, "use fast methods for selection"));
+        }, "use approximate Shapley value for bad and weaker axiom selection"));
+        options.add(OptionType.FLAG.create("power-index-banzhaf-approximate", b -> {
+            badAxiomStrategy = BadAxiomStrategy.BANZHAF_APPROXIMATE;
+            weakerAxiomStrategy = WeakerAxiomStrategy.BANZHAF_APPROXIMATE;
+        }, "use approximate Banzhaf value for bad and weaker axiom selection"));
         options.add(OptionType.options(
                 Map.of("intersect", RefOntologyStrategy.INTERSECTION_OF_MCS,
                         "intersect-of-some", RefOntologyStrategy.INTERSECTION_OF_SOME_MCS,
@@ -42,12 +49,14 @@ public class RepairWithPowerIndexes extends RepairApp {
                         "method for reference ontology selection"));
         options.add(OptionType.options(
                 Map.of("shapley-exact", BadAxiomStrategy.SHAPLEY_EXACT,
-                        "shapley-approximate", BadAxiomStrategy.SHAPLEY_APPROXIMATE))
+                        "shapley-approximate", BadAxiomStrategy.SHAPLEY_APPROXIMATE,
+                        "banzhaf-approximate", BadAxiomStrategy.BANZHAF_APPROXIMATE))
                 .create("bad-axiom", method -> badAxiomStrategy = method,
                         "method for bad axiom selection"));
         options.add(OptionType.options(
                 Map.of("shapley-exact", WeakerAxiomStrategy.SHAPLEY_EXACT,
-                        "shapley-approximate", WeakerAxiomStrategy.SHAPLEY_APPROXIMATE))
+                        "shapley-approximate", WeakerAxiomStrategy.SHAPLEY_APPROXIMATE,
+                        "banzhaf-approximate", WeakerAxiomStrategy.BANZHAF_APPROXIMATE))
                 .create("weaker-axiom", method -> weakerAxiomStrategy = method,
                         "method for weaker axiom selection"));
         options.add(OptionType.FLAG.create("strict-nnf", b -> {
@@ -83,6 +92,7 @@ public class RepairWithPowerIndexes extends RepairApp {
         options.add(OptionType.options(
                 Map.of("troquard2018-shapley-exact", "troquard2018-shapley-exact",
                         "troquard2018-shapley-approximate", "troquard2018-shapley-approximate",
+                        "troquard2018-banzhaf-approximate", "troquard2018-banzhaf-approximate",
                         "confalonieri2020-shapley-exact", "confalonieri2020-shapley-exact",
                         "confalonieri2020-shapley-approximate", "confalonieri2020-shapley-approximate",
                         "bernard2023-shapley-exact", "bernard2023-shapley-exact",
@@ -103,6 +113,15 @@ public class RepairWithPowerIndexes extends RepairApp {
                             refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
                             badAxiomStrategy = BadAxiomStrategy.SHAPLEY_APPROXIMATE;
                             weakerAxiomStrategy = WeakerAxiomStrategy.SHAPLEY_APPROXIMATE;
+                            weakeningFlags = AxiomWeakener.FLAG_SROIQ_STRICT | AxiomWeakener.FLAG_SIMPLE_ROLES_STRICT
+                                    | AxiomWeakener.FLAG_RIA_ONLY_SIMPLE
+                                    | AxiomWeakener.FLAG_ALC_STRICT | AxiomWeakener.FLAG_NO_ROLE_REFINEMENT
+                                    | AxiomWeakener.FLAG_OWL2_SET_OPERANDS;
+                        }
+                        case "troquard2018-banzhaf-approximate" -> {
+                            refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
+                            badAxiomStrategy = BadAxiomStrategy.BANZHAF_APPROXIMATE;
+                            weakerAxiomStrategy = WeakerAxiomStrategy.BANZHAF_APPROXIMATE;
                             weakeningFlags = AxiomWeakener.FLAG_SROIQ_STRICT | AxiomWeakener.FLAG_SIMPLE_ROLES_STRICT
                                     | AxiomWeakener.FLAG_RIA_ONLY_SIMPLE
                                     | AxiomWeakener.FLAG_ALC_STRICT | AxiomWeakener.FLAG_NO_ROLE_REFINEMENT

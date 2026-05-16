@@ -28,10 +28,10 @@ import www.ontologyutils.toolbox.*;
  * inferred information content of the resulting repairs.
  */
 public class RepairComparisonExperiment extends App {
-    private static final int TRIALS = 10;
+    private static final int TRIALS = 5;
     private static final long BASE_SEED = 13L;
     private static final long WEAKENING_TIMEOUT_SECONDS = 300L;
-    private static final long POWER_INDEX_TIMEOUT_SECONDS = 900L;
+    private static final long POWER_INDEX_TIMEOUT_SECONDS = 600L;
 
     private final List<String> inputFiles = new ArrayList<>();
     private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();

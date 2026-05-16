@@ -65,15 +65,20 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
      */
     public static enum BadAxiomStrategy {
         /**
-         * Select the weaker axiom with the lowest Shapley inconsistency value (exact
+         * Select the weaker axiom with the highest Shapley inconsistency value (exact
          * computation).
          */
         SHAPLEY_EXACT,
         /**
-         * Select the weaker axiom with the lowest Shapley inconsistency value
+         * Select the weaker axiom with the highest Shapley inconsistency value
          * (approximate computation).
          */
         SHAPLEY_APPROXIMATE,
+        /**
+         * Select the weaker axiom with the highest Banzhaf inconsistency value
+         * (approximate computation).
+         */
+        BANZHAF_APPROXIMATE,
     }
 
     /**
@@ -90,6 +95,11 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
          * (approximate computation).
          */
         SHAPLEY_APPROXIMATE,
+        /**
+         * Select the weaker axiom with the lowest Banzhaf inconsistency value
+         * (approximate computation).
+         */
+        BANZHAF_APPROXIMATE,
     }
 
     // private final PowerIndex powerIndex;
@@ -133,6 +143,7 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
         switch (strategy) {
             case SHAPLEY_EXACT -> this.powerIndexBadAxiom = new ShapleyInconsistencyValueExact();
             case SHAPLEY_APPROXIMATE -> this.powerIndexBadAxiom = new ShapleyInconsistencyValueApproximate();
+            case BANZHAF_APPROXIMATE -> this.powerIndexBadAxiom = new BanzhafInconsistencyValueApproximate();
             default -> throw new IllegalArgumentException("Unsupported bad axiom strategy: " + strategy);
         }
     }
@@ -141,6 +152,7 @@ public class OntologyRepairWithPowerIndexes extends OntologyRepairWeakening {
         switch (strategy) {
             case SHAPLEY_EXACT -> this.powerIndexWeakerAxiom = new ShapleyInconsistencyValueExact();
             case SHAPLEY_APPROXIMATE -> this.powerIndexWeakerAxiom = new ShapleyInconsistencyValueApproximate();
+            case BANZHAF_APPROXIMATE -> this.powerIndexWeakerAxiom = new BanzhafInconsistencyValueApproximate();
             default -> throw new IllegalArgumentException("Unsupported weaker axiom strategy: " + strategy);
         }
     }
