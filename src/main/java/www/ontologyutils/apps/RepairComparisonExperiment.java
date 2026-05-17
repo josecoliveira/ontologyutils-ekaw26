@@ -17,6 +17,7 @@ import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 import openllet.owlapi.OpenlletReasonerFactory;
 import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
+import www.ontologyutils.normalization.SroiqNormalization;
 import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
 import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
@@ -30,11 +31,11 @@ import www.ontologyutils.toolbox.*;
  */
 public class RepairComparisonExperiment extends App {
     private static final int TRIALS = 100;
-    private static final int CONSECUTIVE_FAILURE_CAP = 3;
+    private static final int CONSECUTIVE_FAILURE_CAP = -1;
     private static final long BASE_SEED = 13L;
     private static final long REMOVAL_TIMEOUT_SECONDS = 300L;
     private static final long WEAKENING_TIMEOUT_SECONDS = 300L;
-    private static final long POWER_INDEX_TIMEOUT_SECONDS = 600L;
+    private static final long POWER_INDEX_TIMEOUT_SECONDS = 20L;
     private static final long MAKE_INCONSISTENT_TIMEOUT_SECONDS = 300L;
 
     private final List<String> inputFiles = new ArrayList<>();
@@ -86,6 +87,34 @@ public class RepairComparisonExperiment extends App {
                         | AxiomStrengthener.FLAG_RIA_ONLY_SIMPLE | AxiomStrengthener.FLAG_ALC_STRICT
                         | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS,
                 false);
+    }
+
+    private void logOntologySummary(Ontology ontology) {
+        try (var classifiedOntology = ontology.cloneWithHermit()) {
+            logMessage("Ontology summary after normalization:");
+            logMessage("Axioms: " + classifiedOntology.logicalAxioms().count() + "; Concept names: "
+                    + classifiedOntology.conceptsInSignature().count() + "; Role names: "
+                    + classifiedOntology.rolesInSignature().count() + "; Subconcepts: "
+                    + classifiedOntology.subConcepts().count());
+
+            var reports = classifiedOntology.checkOwlProfiles();
+            var owl2Profiles = new StringBuilder();
+            for (var report : reports) {
+                if (!report.isInProfile() && report.getProfile().getName().endsWith("DL")) {
+                    logMessage(report.toString());
+                }
+            }
+            for (var report : reports) {
+                if (report.isInProfile()) {
+                    owl2Profiles.append(report.getProfile().getName()).append("; ");
+                }
+            }
+            logMessage("OWL 2 profiles: " + owl2Profiles);
+
+            var dlLanguages = new StringBuilder();
+            classifiedOntology.checkDlExpressivity().forEach(language -> dlLanguages.append(language.name()).append("; "));
+            logMessage("DL languages: " + dlLanguages);
+        }
     }
 
     private void makeInconsistent(Ontology ontology, long seed) {
@@ -297,6 +326,10 @@ public class RepairComparisonExperiment extends App {
 
             try (var ontology = Ontology.loadOntology(input, reasonerFactory)) {
                 logMessage("Loaded...");
+                logMessage("Normalizing ontology with SROIQ normalization...");
+                new SroiqNormalization(true, false).apply(ontology);
+                logMessage("Normalized ontology with SROIQ normalization.");
+                logOntologySummary(ontology);
 
                 int successfulTrials = initialSuccessfulTrials;
                 int attemptedTrials = initialAttemptedTrials;
