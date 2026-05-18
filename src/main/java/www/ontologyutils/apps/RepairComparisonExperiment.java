@@ -31,11 +31,11 @@ import www.ontologyutils.toolbox.*;
  */
 public class RepairComparisonExperiment extends App {
     private static final int TRIALS = 100;
-    private static final int CONSECUTIVE_FAILURE_CAP = -1;
+    private static final int CONSECUTIVE_FAILURE_CAP = 3;
     private static final long BASE_SEED = 13L;
     private static final long REMOVAL_TIMEOUT_SECONDS = 300L;
     private static final long WEAKENING_TIMEOUT_SECONDS = 300L;
-    private static final long POWER_INDEX_TIMEOUT_SECONDS = 20L;
+    private static final long POWER_INDEX_TIMEOUT_SECONDS = 60L * 4;
     private static final long MAKE_INCONSISTENT_TIMEOUT_SECONDS = 300L;
 
     private final List<String> inputFiles = new ArrayList<>();
@@ -184,6 +184,19 @@ public class RepairComparisonExperiment extends App {
         return "Repair failed: " + e.getClass().getSimpleName();
     }
 
+    private boolean isCancellationThrowable(Throwable e) {
+        var current = e;
+        while (current != null) {
+            if (current instanceof CanceledException
+                    || current instanceof InterruptedException
+                    || current instanceof CancellationException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
     private void applyRepairWithTimeout(Supplier<? extends OntologyRepair> repairSupplier, Ontology ontology,
             String repairName, long timeoutSeconds, long seed) throws TimeoutException {
         var executor = Executors.newSingleThreadExecutor(r -> {
@@ -204,8 +217,13 @@ public class RepairComparisonExperiment extends App {
                 throw new TimeoutException("Repair timeout: " + repairName + " exceeded " + timeoutSeconds + " seconds");
             }
         } catch (InterruptedException e) {
-            throw Utils.panic(e);
+            Thread.currentThread().interrupt();
+            throw new CanceledException();
         } catch (ExecutionException e) {
+            if (isCancellationThrowable(e)) {
+                Thread.currentThread().interrupt();
+                throw new CanceledException();
+            }
             // Convert ExecutionException to TimeoutException to be handled uniformly as retry trigger
             TimeoutException retryTrigger = new TimeoutException(extractErrorMessage(e));
             retryTrigger.initCause(e);
@@ -236,8 +254,13 @@ public class RepairComparisonExperiment extends App {
                         "Make-inconsistent timeout: exceeded " + MAKE_INCONSISTENT_TIMEOUT_SECONDS + " seconds");
             }
         } catch (InterruptedException e) {
-            throw Utils.panic(e);
+            Thread.currentThread().interrupt();
+            throw new CanceledException();
         } catch (ExecutionException e) {
+            if (isCancellationThrowable(e)) {
+                Thread.currentThread().interrupt();
+                throw new CanceledException();
+            }
             TimeoutException retryTrigger = new TimeoutException(extractErrorMessage(e));
             retryTrigger.initCause(e);
             throw retryTrigger;
@@ -255,7 +278,7 @@ public class RepairComparisonExperiment extends App {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw Utils.panic(e);
+            throw new CanceledException();
         }
     }
 
@@ -313,6 +336,7 @@ public class RepairComparisonExperiment extends App {
             throw new IllegalArgumentException("No input files specified");
         }
 
+        boolean abortedByUser = false;
         for (var input : inputFiles) {
             var ontologyStartTime = System.nanoTime();
             // Extract ontology filename (without path and extension)
@@ -485,6 +509,17 @@ public class RepairComparisonExperiment extends App {
                                 + " and start-attempted-trials=" + (attemptedTrials + 1) + ".");
                         abortedEarly = true;
                         break;
+                    } catch (CanceledException e) {
+                        Thread.currentThread().interrupt();
+                        attemptedTrials++;
+                        logMessage("USER INTERRUPT: aborting whole experiment during ontology " + ontologyFileName + ".");
+                        logMessage("Aborting ontology after successfulTrials=" + successfulTrials
+                                + ", attemptedTrials=" + attemptedTrials + ".");
+                        logMessage("Resume this ontology with start-successful-trials=" + successfulTrials
+                                + " and start-attempted-trials=" + attemptedTrials + ".");
+                        abortedEarly = true;
+                        abortedByUser = true;
+                        break;
                     }
 
                     attemptedTrials++;
@@ -505,13 +540,23 @@ public class RepairComparisonExperiment extends App {
             logMessage("Ontology run time for " + ontologyFileName + ": "
                     + (ontologyEndTime - ontologyStartTime) / 1_000_000 + " ms; total run time: "
                     + (ontologyEndTime - startTime) / 1_000_000 + " ms)");
+
+            if (abortedByUser) {
+                break;
+            }
         }
 
 
         var endTime = System.nanoTime();
-        logMessage("All trials done. (run time: " + (endTime - startTime) / 1_000_000
-                + " ms; total run time: " + (endTime - startTime) / 1_000_000 + " ms; "
-                + Ontology.reasonerCalls + " reasoner calls)");
+        if (abortedByUser) {
+            logMessage("Experiment aborted by user. (run time: " + (endTime - startTime) / 1_000_000
+                    + " ms; total run time: " + (endTime - startTime) / 1_000_000 + " ms; "
+                    + Ontology.reasonerCalls + " reasoner calls)");
+        } else {
+            logMessage("All trials done. (run time: " + (endTime - startTime) / 1_000_000
+                    + " ms; total run time: " + (endTime - startTime) / 1_000_000 + " ms; "
+                    + Ontology.reasonerCalls + " reasoner calls)");
+        }
     }
 
     /**
