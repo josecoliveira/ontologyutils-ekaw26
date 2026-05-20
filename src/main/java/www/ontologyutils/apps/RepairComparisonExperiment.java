@@ -35,7 +35,7 @@ public class RepairComparisonExperiment extends App {
     private static final long BASE_SEED = 13L;
     private static final long REMOVAL_TIMEOUT_SECONDS = 300L;
     private static final long WEAKENING_TIMEOUT_SECONDS = 300L;
-    private static final long POWER_INDEX_TIMEOUT_SECONDS = 60L * 4;
+    private static final long POWER_INDEX_TIMEOUT_SECONDS = 60L;
     private static final long MAKE_INCONSISTENT_TIMEOUT_SECONDS = 300L;
 
     private final List<String> inputFiles = new ArrayList<>();
