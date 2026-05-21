@@ -1,21 +1,14 @@
 package www.ontologyutils.apps;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
-import org.semanticweb.HermiT.ReasonerFactory;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
-import openllet.owlapi.OpenlletReasonerFactory;
 import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
-import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.normalization.SroiqNormalization;
 import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
@@ -25,19 +18,40 @@ import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.WeakerAxiomStrate
 import www.ontologyutils.toolbox.*;
 
 /**
- * Run a single trial and write one-row CSV.
+ * Run a single trial and print one JSON object to stdout.
  *
  * CLI args:
  *   --ontology <path>  (required)
  *   --seed <long>      (required)
- *   --out <path>       (required)
+ *   --run-id <string>  (optional)
  *   --removal-timeout-secs <int>
  *   --weakening-timeout-secs <int>
  *   --power-index-timeout-secs <int>
  *   --make-inconsistent-timeout-secs <int>
  */
 public class SingleTrialExperiment {
-    private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private final OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+
+    private static final class TrialResult {
+        long seed;
+        String runId;
+        String trialStatus;
+        String errorType;
+        String failureStage;
+        String errorMessage;
+        Double iicPowerVsRandom;
+        Double iicPowerVsMcs;
+        Double iicPowerVsWeak;
+        Long randomRemovalMs;
+        Long notInLargestMcsRemovalMs;
+        Long weakeningMs;
+        Long powerIndexMs;
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
 
     private OntologyRepairWeakening createWeakeningRepair() {
         return new OntologyRepairWeakening(Ontology::isConsistent, RefOntologyStrategy.ONE_MCS,
@@ -126,14 +140,12 @@ public class SingleTrialExperiment {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new CanceledException();
-        } catch (ExecutionException e) {
+            } catch (ExecutionException e) {
             if (isCancellationThrowable(e)) {
                 Thread.currentThread().interrupt();
                 throw new CanceledException();
             }
-            TimeoutException retryTrigger = new TimeoutException(extractErrorMessage(e));
-            retryTrigger.initCause(e);
-            throw retryTrigger;
+            throw new IllegalStateException(extractErrorMessage(e), e);
         } finally {
             executor.shutdownNow();
             awaitRepairTermination(executor, repairName);
@@ -167,9 +179,7 @@ public class SingleTrialExperiment {
                 Thread.currentThread().interrupt();
                 throw new CanceledException();
             }
-            TimeoutException retryTrigger = new TimeoutException(extractErrorMessage(e));
-            retryTrigger.initCause(e);
-            throw retryTrigger;
+            throw new IllegalStateException(extractErrorMessage(e), e);
         } finally {
             executor.shutdownNow();
             awaitRepairTermination(executor, "make-inconsistent");
@@ -231,34 +241,104 @@ public class SingleTrialExperiment {
         return Utils.toSet(ontology.inferredSubClassAxiomsOver(subConcepts));
     }
 
-    private void createCsvFileWithHeader(Path file) throws IOException {
-        try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-            writer.write("iic_power_vs_random,iic_power_vs_not_in_largest_mcs,iic_power_vs_weakening,run_id");
-            writer.newLine();
-        }
-    }
-
-    private void writeCsvLine(Path file, double v1, double v2, double v3, String runId) throws IOException {
-        try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE)) {
-            writer.write(Double.toString(v1));
-            writer.write(",");
-            writer.write(Double.toString(v2));
-            writer.write(",");
-            writer.write(Double.toString(v3));
-            writer.write(",");
-            writer.write(runId != null ? runId : "");
-            writer.newLine();
-        }
-    }
-
     private void log(String msg) {
-        System.out.println(msg);
+        System.err.println(msg);
     }
 
     private void logErr(String msg) {
         System.err.println(msg);
+    }
+
+    private static long nanosToMillis(long nanos) {
+        return TimeUnit.NANOSECONDS.toMillis(nanos);
+    }
+
+    private static String jsonEscape(String value) {
+        if (value == null) {
+            return "";
+        }
+        var sb = new StringBuilder(value.length() + 16);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\b' -> sb.append("\\b");
+                case '\f' -> sb.append("\\f");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private static void appendJsonField(StringBuilder sb, String key, String value, boolean comma) {
+        sb.append('"').append(jsonEscape(key)).append('"').append(':');
+        if (value == null) {
+            sb.append("null");
+        } else {
+            sb.append('"').append(jsonEscape(value)).append('"');
+        }
+        if (comma) {
+            sb.append(',');
+        }
+    }
+
+    private static void appendJsonField(StringBuilder sb, String key, Number value, boolean comma) {
+        sb.append('"').append(jsonEscape(key)).append('"').append(':');
+        if (value == null) {
+            sb.append("null");
+        } else {
+            sb.append(value.toString());
+        }
+        if (comma) {
+            sb.append(',');
+        }
+    }
+
+    private static String trialResultToJson(TrialResult result) {
+        var sb = new StringBuilder(512);
+        sb.append('{');
+        appendJsonField(sb, "seed", result.seed, true);
+        appendJsonField(sb, "run_id", result.runId, true);
+        appendJsonField(sb, "trial_status", result.trialStatus, true);
+        appendJsonField(sb, "error_type", result.errorType, true);
+        appendJsonField(sb, "failure_stage", result.failureStage, true);
+        appendJsonField(sb, "error_message", result.errorMessage, true);
+        sb.append('"').append("iic_values").append('"').append(':').append('{');
+        appendJsonField(sb, "power_vs_random", result.iicPowerVsRandom, true);
+        appendJsonField(sb, "power_vs_not_in_largest_mcs", result.iicPowerVsMcs, true);
+        appendJsonField(sb, "power_vs_weakening", result.iicPowerVsWeak, false);
+        sb.append('}').append(',');
+        sb.append('"').append("repair_runtimes_ms").append('"').append(':').append('{');
+        appendJsonField(sb, "random_removal", result.randomRemovalMs, true);
+        appendJsonField(sb, "not_in_largest_mcs_removal", result.notInLargestMcsRemovalMs, true);
+        appendJsonField(sb, "weakening", result.weakeningMs, true);
+        appendJsonField(sb, "power_index", result.powerIndexMs, false);
+        sb.append('}');
+        sb.append('}');
+        return sb.toString();
+    }
+
+    private void printTrialResult(TrialResult result) {
+        System.out.println(trialResultToJson(result));
+    }
+
+    private void runWithTiming(ThrowingRunnable action, LongConsumer sink) throws Exception {
+        long start = System.nanoTime();
+        try {
+            action.run();
+        } finally {
+            sink.accept(nanosToMillis(System.nanoTime() - start));
+        }
     }
 
     private static long parseLongArg(Map<String, String> map, String key, long defaultValue) {
@@ -284,10 +364,10 @@ public class SingleTrialExperiment {
 
         String ontologyPath = map.get("ontology");
         String seedStr = map.get("seed");
-        String outPath = map.get("out");
+        String runId = map.getOrDefault("run-id", "");
 
-        if (ontologyPath == null || seedStr == null || outPath == null) {
-            System.err.println("Usage: SingleTrialExperiment --ontology <path> --seed <long> --out <path> [--removal-timeout-secs N] [--weakening-timeout-secs N] [--power-index-timeout-secs N] [--make-inconsistent-timeout-secs N]");
+        if (ontologyPath == null || seedStr == null) {
+            System.err.println("Usage: SingleTrialExperiment --ontology <path> --seed <long> [--run-id <string>] [--removal-timeout-secs N] [--weakening-timeout-secs N] [--power-index-timeout-secs N] [--make-inconsistent-timeout-secs N]");
             System.exit(2);
         }
 
@@ -305,60 +385,49 @@ public class SingleTrialExperiment {
         long powerIndexTimeout = parseLongArg(map, "power-index-timeout-secs", 60L);
         long makeInconsistentTimeout = parseLongArg(map, "make-inconsistent-timeout-secs", 300L);
 
-        Path out = Path.of(outPath);
-        try {
-            Files.createDirectories(out.getParent());
-        } catch (IOException e) {
-            System.err.println("Failed to create output directory: " + e.getMessage());
-            System.exit(3);
-        }
+        app.log("SingleTrialExperiment starting: ontology=" + ontologyPath + ", seed=" + seed + ", run_id=" + runId);
 
-        app.log("SingleTrialExperiment starting: ontology=" + ontologyPath + ", seed=" + seed + ", out=" + outPath);
-        System.out.println("TRIAL_SEED: " + seed);
+        TrialResult result = new TrialResult();
+        result.seed = seed;
+        result.runId = runId;
 
+        String failureStage = null;
         try (var ontology = Ontology.loadOntology(ontologyPath, app.reasonerFactory)) {
-            app.log("Loaded...");
+            app.log("Loaded ontology.");
             app.log("Normalizing ontology with SROIQ normalization...");
             new SroiqNormalization(true, false).apply(ontology);
             app.log("Normalized ontology with SROIQ normalization.");
 
-            // Make inconsistent
-            app.log("  Making ontology inconsistent...");
-            try {
-                app.applyMakeInconsistentWithTimeout(ontology, seed, makeInconsistentTimeout);
-            } catch (TimeoutException e) {
-                String msg = e.getMessage();
-                String m = (msg != null ? msg : "Make-inconsistent failed (no error details)");
-                app.logErr("  " + m);
-                System.err.println("TRIAL_STATUS: FAIL: " + m);
-                System.exit(4);
-            } catch (CanceledException e) {
-                String m = "Make-inconsistent cancelled by interrupt";
-                app.logErr(m);
-                System.err.println("TRIAL_STATUS: FAIL: " + m);
-                System.exit(5);
-            }
+            failureStage = "make_inconsistent";
+            app.log("Making ontology inconsistent...");
+            app.applyMakeInconsistentWithTimeout(ontology, seed, makeInconsistentTimeout);
 
-            // Run repairs on separate clones
             try (var repairedRandom = ontology.cloneWithSeparateCache()) {
-                app.log("  Repairing with removal (random)...");
-                app.applyRepairWithTimeout(app::createRandomRemovalRepair, repairedRandom, "removal-random",
-                        removalTimeout, seed + 1);
+                failureStage = "random_removal";
+                app.log("Repairing with removal (random)...");
+                app.runWithTiming(() -> app.applyRepairWithTimeout(app::createRandomRemovalRepair, repairedRandom,
+                        "removal-random", removalTimeout, seed + 1), duration -> result.randomRemovalMs = duration);
 
                 try (var repairedMcs = ontology.cloneWithSeparateCache()) {
-                    app.log("  Repairing with removal (not-in-largest-mcs)...");
-                    app.applyRepairWithTimeout(app::createLargestMcsRemovalRepair, repairedMcs,
-                            "removal-not-in-largest-mcs", removalTimeout, seed + 2);
+                    failureStage = "not_in_largest_mcs_removal";
+                    app.log("Repairing with removal (not-in-largest-mcs)...");
+                    app.runWithTiming(() -> app.applyRepairWithTimeout(app::createLargestMcsRemovalRepair, repairedMcs,
+                            "removal-not-in-largest-mcs", removalTimeout, seed + 2),
+                            duration -> result.notInLargestMcsRemovalMs = duration);
 
                     try (var repairedWeak = ontology.cloneWithSeparateCache()) {
-                        app.log("  Repairing with weakening (troquard2018)...");
-                        app.applyRepairWithTimeout(app::createWeakeningRepair, repairedWeak, "weakening",
-                                weakeningTimeout, seed + 3);
+                        failureStage = "weakening";
+                        app.log("Repairing with weakening...");
+                        app.runWithTiming(() -> app.applyRepairWithTimeout(app::createWeakeningRepair, repairedWeak,
+                                "weakening", weakeningTimeout, seed + 3),
+                                duration -> result.weakeningMs = duration);
 
                         try (var repairedPower = ontology.cloneWithSeparateCache()) {
-                            app.log("  Repairing with power indexes (troquard2018-power-index)...");
-                            app.applyRepairWithTimeout(app::createPowerIndexRepair, repairedPower, "power-index",
-                                    powerIndexTimeout, seed + 4);
+                            failureStage = "power_index";
+                            app.log("Repairing with power index...");
+                            app.runWithTiming(() -> app.applyRepairWithTimeout(app::createPowerIndexRepair, repairedPower,
+                                    "power-index", powerIndexTimeout, seed + 4),
+                                    duration -> result.powerIndexMs = duration);
 
                             var subConcepts = app.collectSubConcepts(repairedRandom, repairedMcs, repairedWeak, repairedPower);
                             var inferredRandom = app.inferredAxioms(repairedRandom, subConcepts);
@@ -366,46 +435,46 @@ public class SingleTrialExperiment {
                             var inferredWeak = app.inferredAxioms(repairedWeak, subConcepts);
                             var inferredPower = app.inferredAxioms(repairedPower, subConcepts);
 
-                            var iicPowerVsRandom = Ontology.relativeInformationContent(inferredPower, inferredRandom);
-                            var iicPowerVsMcs = Ontology.relativeInformationContent(inferredPower, inferredMcs);
-                            var iicPowerVsWeak = Ontology.relativeInformationContent(inferredPower, inferredWeak);
+                            result.iicPowerVsRandom = Ontology.relativeInformationContent(inferredPower, inferredRandom);
+                            result.iicPowerVsMcs = Ontology.relativeInformationContent(inferredPower, inferredMcs);
+                            result.iicPowerVsWeak = Ontology.relativeInformationContent(inferredPower, inferredWeak);
+                            result.trialStatus = "success";
+                            result.errorType = null;
+                            result.failureStage = null;
+                            result.errorMessage = null;
 
-                            // Write CSV header + single line
-                                                            if (!Files.exists(out)) {
-                                                                app.createCsvFileWithHeader(out);
-                                                            }
-                                                            String runId = map.get("run-id");
-                                                            app.writeCsvLine(out, iicPowerVsRandom, iicPowerVsMcs, iicPowerVsWeak, runId);
-
-                            app.log("  IIC (Power index wrt Random removal): " + iicPowerVsRandom);
-                            app.log("  IIC (Power index wrt Not-in-largest-MCS removal): " + iicPowerVsMcs);
-                            app.log("  IIC (Power index wrt Weakening): " + iicPowerVsWeak);
-
+                            app.log("IIC (Power index wrt Random removal): " + result.iicPowerVsRandom);
+                            app.log("IIC (Power index wrt Not-in-largest-MCS removal): " + result.iicPowerVsMcs);
+                            app.log("IIC (Power index wrt Weakening): " + result.iicPowerVsWeak);
                             app.log("SingleTrialExperiment completed successfully.");
-                            System.out.println("TRIAL_STATUS: SUCCESS");
-                            System.exit(0);
-
-                        } // repairedPower
-                    } // repairedWeak
-                } // repairedMcs
-            } // repairedRandom
-
+                            app.printTrialResult(result);
+                            return;
+                        }
+                    }
+                }
+            }
         } catch (TimeoutException e) {
-            String m = "Timeout while running repairs: " + e.getMessage();
-            app.logErr(m);
-            System.err.println("TRIAL_STATUS: FAIL: " + m);
-            System.exit(6);
-        } catch (IOException e) {
-            String m = "I/O error: " + e.getMessage();
-            app.logErr(m);
-            System.err.println("TRIAL_STATUS: FAIL: " + m);
-            System.exit(8);
+            result.trialStatus = "time_limit_exceeded";
+            result.errorType = "timeout";
+            result.failureStage = failureStage;
+            result.errorMessage = e.getMessage();
+            app.logErr("Timeout: " + (e.getMessage() != null ? e.getMessage() : "no message"));
+        } catch (OutOfMemoryError e) {
+            result.trialStatus = "memory_limit_exceeded";
+            result.errorType = "out_of_memory";
+            result.failureStage = failureStage;
+            result.errorMessage = e.getMessage();
+            app.logErr("OutOfMemoryError: " + (e.getMessage() != null ? e.getMessage() : "no message"));
         } catch (Exception e) {
-            String m = "Unexpected error: " + e.getClass().getSimpleName() + ": " + e.getMessage();
-            app.logErr(m);
-            System.err.println("TRIAL_STATUS: FAIL: " + m);
-            System.exit(9);
+            result.trialStatus = "memory_limit_exceeded";
+            result.errorType = "failure";
+            result.failureStage = failureStage;
+            result.errorMessage = app.extractErrorMessage(e);
+            app.logErr("Failure: " + result.errorMessage);
         }
+
+        app.printTrialResult(result);
+        System.exit(0);
     }
 }
 
