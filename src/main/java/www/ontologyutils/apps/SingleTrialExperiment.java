@@ -398,9 +398,13 @@ public class SingleTrialExperiment {
             new SroiqNormalization(true, false).apply(ontology);
             app.log("Normalized ontology with SROIQ normalization.");
 
-            failureStage = "make_inconsistent";
-            app.log("Making ontology inconsistent...");
-            app.applyMakeInconsistentWithTimeout(ontology, seed, makeInconsistentTimeout);
+            if (ontology.isConsistent()) {
+                failureStage = "make_inconsistent";
+                app.log("Making ontology inconsistent...");
+                app.applyMakeInconsistentWithTimeout(ontology, seed, makeInconsistentTimeout);
+            } else {
+                app.log("Ontology is already inconsistent, skipping make-inconsistent step.");
+            }
 
             try (var repairedRandom = ontology.cloneWithSeparateCache()) {
                 failureStage = "random_removal";

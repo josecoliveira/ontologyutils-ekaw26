@@ -27,7 +27,7 @@ from pathlib import Path
 # Number of successful trials to collect
 N_TRIALS = 100
 BASE_SEED = 13
-STEP = 5
+STEP = 100
 # Resume counters (set non-zero to resume a previous run)
 START_SUCCESSFUL_TRIALS = 0
 START_ATTEMPTED_TRIALS = 0
