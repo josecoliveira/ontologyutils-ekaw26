@@ -12,3 +12,5 @@ bin/
 *-made-consistent.owl
 *.log
 tmp.*
+lib/
+!lib/factplusplus-1.7.0.3.jar
