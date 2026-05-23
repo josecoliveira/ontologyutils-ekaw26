@@ -1,73 +1,60 @@
 # Ontology Repair with Power Indexes
 
-## How to Build
+This repository contains the source code for the ontology repair prototype used in the paper.
 
-The prototype is implemented in Java, and will require at least Java version 17. The Maven tool has been used for dependency management. Both Maven and a Java 17 JDK must be installed for building this project. To download and build the project, the following code can be executed. After building, the packaged JAR files will be located in `target/`. There will be two different packages, one containing only the code in the project named `ontologyutils-X.X.X.jar`, and one containing also all required dependencies named `shaded-ontologyutils-X.X.X.jar`. If you want to skip running the tests, you can use `mvn package -DskipTests`.
+## Requirements
 
-```bash
-git clone https://github.com/josecoliveira/ontologyutils
-cp ontologyutils
-mvn clean compile package
-```
+- Java 17
+- Maven
 
-This checkout expects the `Fact++` jar to be available locally at `lib/factplusplus-1.7.0.3.jar`. After downloading that jar, place it in `lib/` and run Maven normally. If you prefer to install it into your local Maven repository instead, use:
+The build expects the Fact++ dependency at `lib/factplusplus-1.7.0.3.jar`. The jar is committed in this checkout, but you can also install it into your local Maven repository:
 
 ```bash
-mvn install:install-file -Dfile=/path/to/factplusplus-1.7.0.3.jar -DgroupId=ontologyutils -DartifactId=factplusplus -Dversion=1.7.0.3 -Dpackaging=jar
+mvn install:install-file -Dfile=lib/factplusplus-1.7.0.3.jar -DgroupId=ontologyutils -DartifactId=factplusplus -Dversion=1.7.0.3 -Dpackaging=jar
 ```
 
-## How to Run
+## Build
 
-This will run the `RepairWithPowerIndexes` application with the exact Shapley value strategy for selecting the bad axiom and the weaker axiom on the `leftpolicies-ok.owl` test file:
+Build the project with Maven from the repository root:
 
 ```bash
-java -jar target/shaded-ontologyutils-X.X.X.jar  src/test/resources/inconsistent/leftpolicies-ok.owl --preset troquard2018-shapley-exact --verbose --normalize
+mvn clean package
 ```
 
-## Original README
+The shaded executable jar is written to `target/shaded-ontologyutils-0.1.0.jar`.
 
-The original README file is located at `README-original.md` made by the original authors of the code. It contains instructions on how to run the other applications.
- 
-## Contributing / Developer setup
-
-If you are contributing or developing locally, follow these steps to get the project running on your machine:
-
-- Prerequisites: Java JDK (17+), Maven, Python 3.
-
-The repository now includes the `Fact++` JAR at `lib/factplusplus-1.7.0.3.jar` so contributors do not need to locate this hard-to-find artifact manually. The `lib/` directory is normally ignored, but `lib/factplusplus-1.7.0.3.jar` is intentionally tracked and available in this checkout.
-
-If you prefer to install the artifact into your local Maven repository, you may still do so (optional):
+If you want to skip the test suite:
 
 ```bash
-mvn install:install-file \
-	-Dfile=lib/factplusplus-1.7.0.3.jar \
-	-DgroupId=ontologyutils \
-	-DartifactId=factplusplus \
-	-Dversion=1.7.0.3 \
-	-Dpackaging=jar
+mvn clean package -DskipTests
 ```
 
-After installing the artifact (or using the committed copy in `lib/`), the project `pom.xml` is configured to use the dependency from your local repository. Build and run a single Java trial directly with Maven to verify everything is on the classpath:
+## Run Repair With Power Indexes
+
+Run the repair application directly with the shaded jar on the classpath:
 
 ```bash
-mvn exec:java -Dexec.mainClass=www.ontologyutils.apps.SingleTrialExperiment \
-	-Dexec.args="--ontology src/test/resources/ekaw26/cleanup/bctt.owl --seed 28 --out analysis/data/shapley-shapley/iic-temp-28.csv --run-id LOCAL"
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/bctt.owl --preset troquard2018 --power-index-shapley-exact --verbose --normalize
 ```
 
-To run the provided driver script which executes many trials and collects CSVs (recommended):
+The approximate variant is also available:
 
 ```bash
-# from project root
-python3 analysis/run_trials.py src/test/resources/ekaw26/cleanup/bctt.owl
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/elig.owl --preset troquard2018 --power-index-shapley-approximate --verbose --normalize
 ```
 
-Notes:
-- If you see warnings about restricted native access (JDK 19+), you can add the JVM flag to enable native access when running Maven or Java:
+You can direct the repaired ontology output to a file using the `-o` or `--output` option.
+
+Example: write the repaired ontology to `results/repair.owl`:
 
 ```bash
-MAVEN_OPTS="--enable-native-access=ALL-UNNAMED" mvn exec:java ...
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/elig.owl --preset troquard2018 --power-index-shapley-approximate --normalize --output results/repair.owl
 ```
 
-- The committed `lib/factplusplus-1.7.0.3.jar` is included to make contributor setup easier; if you prefer not to keep the JAR in your fork, you can remove it and instead run the `mvn install:install-file` command above.
+The inconsistent ontologies used in the paper are in `src/test/resources/ekaw26/inconsistent/`.
 
-If you want, I can run the full `python3 analysis/run_trials.py ...` now to verify an end-to-end successful run.
+## Original Project
+
+This repository is a fork of the original Ontology Utils project. The preserved upstream README is available in [README-original.md](README-original.md).
+
+Original authors: Nicolas Troquard, Roberto Confalonieri, Pietro Galliani, and Roland Bernard.
