@@ -13,7 +13,7 @@ The prototype is implemented in Java, and will require at least Java version 17.
 
 ```
 git clone https://github.com/rolandbernard/ontologyutils
-cp ontologyutils
+cd ontologyutils
 mvn clean compile package
 ```
 If you would rather use the pre-packaged jar files, those are also available in the GitHub repository at https://github.com/rolandbernard/ontologyutils/releases. Note that the releases may be out of date with the master branch of the repository.
