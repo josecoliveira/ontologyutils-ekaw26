@@ -40,7 +40,7 @@ java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWith
 The approximate variant is also available:
 
 ```bash
-java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/elig.owl --preset troquard2018 --power-index-shapley-approximate --verbose --normalize
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/taxrank.owl --preset troquard2018 --power-index-shapley-approximate --verbose --normalize
 ```
 
 You can direct the repaired ontology output to a file using the `-o` or `--output` option.
@@ -48,7 +48,7 @@ You can direct the repaired ontology output to a file using the `-o` or `--outpu
 Example: write the repaired ontology to `results/repair.owl`:
 
 ```bash
-java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/elig.owl --preset troquard2018 --power-index-shapley-approximate --normalize --output results/repair.owl
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/taxrank.owl --preset troquard2018 --power-index-shapley-approximate --normalize --output results/repair.owl
 ```
 
 The inconsistent ontologies used in the paper are in `src/test/resources/ekaw26/inconsistent/`.
