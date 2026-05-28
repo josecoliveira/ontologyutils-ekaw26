@@ -55,7 +55,9 @@ public class UtilsTest {
         // api implementation.
         var df = Ontology.getDefaultDataFactory();
 
-        assertSame(concepts.get(0), concepts.get(4));
+        // The OWLDataFactory does not guarantee identical object instances for the
+        // same IRI across calls; test for equality instead of identity.
+        assertEquals(concepts.get(0), concepts.get(4));
         assertTrue(Utils.sameConcept(concepts.get(0), concepts.get(4)));
 
         var union1A = df.getOWLObjectUnionOf(concepts.get(0), concepts.get(1));
