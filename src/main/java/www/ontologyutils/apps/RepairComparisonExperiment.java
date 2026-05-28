@@ -18,6 +18,8 @@ import openllet.owlapi.OpenlletReasonerFactory;
 import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.normalization.SroiqNormalization;
+import www.ontologyutils.repair.OntologyRepairBuilder;
+import www.ontologyutils.repair.powerindex.PowerIndexType;
 import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
 import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
@@ -61,13 +63,15 @@ public class RepairComparisonExperiment extends App {
         return options;
     }
 
-    private OntologyRepairWeakening createWeakeningRepair() {
-        return new OntologyRepairWeakening(Ontology::isConsistent, RefOntologyStrategy.ONE_MCS,
-                OntologyRepairRemoval.BadAxiomStrategy.IN_SOME_MUS,
-                AxiomStrengthener.FLAG_SROIQ_STRICT | AxiomStrengthener.FLAG_SIMPLE_ROLES_STRICT
+    private OntologyRepair createWeakeningRepair() {
+        return OntologyRepairBuilder.forConsistency()
+                .withRefStrategy(RefOntologyStrategy.ONE_MCS)
+                .withBadStrategy(OntologyRepairRemoval.BadAxiomStrategy.IN_SOME_MUS)
+                .withWeakeningFlags(AxiomStrengthener.FLAG_SROIQ_STRICT | AxiomStrengthener.FLAG_SIMPLE_ROLES_STRICT
                         | AxiomStrengthener.FLAG_RIA_ONLY_SIMPLE | AxiomStrengthener.FLAG_ALC_STRICT
-                        | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS,
-                false);
+                        | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS)
+                .withEnhanceRef(false)
+                .build();
     }
 
     private OntologyRepairRemoval createRandomRemovalRepair() {
@@ -79,14 +83,15 @@ public class RepairComparisonExperiment extends App {
                 OntologyRepairRemoval.BadAxiomStrategy.NOT_IN_LARGEST_MCS);
     }
 
-    private OntologyRepairWithPowerIndexes createPowerIndexRepair() {
-        return new OntologyRepairWithPowerIndexes(Ontology::isConsistent,
-                www.ontologyutils.repair.OntologyRepairWithPowerIndexes.RefOntologyStrategy.ONE_MCS,
-                BadAxiomStrategy.SHAPLEY_APPROXIMATE, WeakerAxiomStrategy.SHAPLEY_APPROXIMATE,
-                AxiomStrengthener.FLAG_SROIQ_STRICT | AxiomStrengthener.FLAG_SIMPLE_ROLES_STRICT
+    private OntologyRepair createPowerIndexRepair() {
+        return OntologyRepairBuilder.forConsistency()
+                .withRefStrategy(RefOntologyStrategy.ONE_MCS)
+                .withPowerIndex(PowerIndexType.SHAPLEY_APPROXIMATE)
+                .withWeakeningFlags(AxiomStrengthener.FLAG_SROIQ_STRICT | AxiomStrengthener.FLAG_SIMPLE_ROLES_STRICT
                         | AxiomStrengthener.FLAG_RIA_ONLY_SIMPLE | AxiomStrengthener.FLAG_ALC_STRICT
-                        | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS,
-                false);
+                        | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS)
+                .withEnhanceRef(false)
+                .build();
     }
 
     private void logOntologySummary(Ontology ontology) {

@@ -6,6 +6,7 @@ import java.util.function.Consumer;
 import org.semanticweb.owlapi.model.OWLAxiom;
 
 import www.ontologyutils.toolbox.Utils;
+import www.ontologyutils.toolbox.LruCache;
 
 /**
  * Computes the exact Shapley inconsistency value for an axiom. This uses the
@@ -13,14 +14,15 @@ import www.ontologyutils.toolbox.Utils;
  * axiom set to compute the exact Shapley value.
  */
 public class ShapleyInconsistencyValueExact implements PowerIndex {
-    private final Map<Set<OWLAxiom>, Integer> drasticCache;
+    // Use a bounded LRU cache to avoid unbounded memory usage on large ontologies.
+    private final java.util.function.Function<Set<OWLAxiom>, Integer> drasticCached;
     private final List<Double> factorialCache;
 
     /**
      * Creates a new exact Shapley inconsistency value computer with empty caches.
      */
     public ShapleyInconsistencyValueExact() {
-        this.drasticCache = new HashMap<>();
+        this.drasticCached = LruCache.wrapFunction(subset -> Utils.isConsistent(subset) ? 0 : 1, 16384);
         this.factorialCache = new ArrayList<>();
         this.factorialCache.add(1.0d);
     }
@@ -74,13 +76,7 @@ public class ShapleyInconsistencyValueExact implements PowerIndex {
 
     private int drasticInconsistencyValue(Set<OWLAxiom> subset) {
         Set<OWLAxiom> key = Set.copyOf(subset);
-        Integer cached = drasticCache.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        int value = Utils.isConsistent(subset) ? 0 : 1;
-        drasticCache.put(key, value);
-        return value;
+        return drasticCached.apply(key);
     }
 
     private double factorial(int n) {
@@ -138,4 +134,3 @@ public class ShapleyInconsistencyValueExact implements PowerIndex {
         generateSubsetsOfSize(elements, targetSize, index + 1, current, consumer);
     }
 }
-

@@ -7,6 +7,9 @@ import java.util.stream.*;
 import org.semanticweb.owlapi.model.*;
 
 import www.ontologyutils.refinement.AxiomWeakener;
+import www.ontologyutils.repair.strategy.ref.RefOntologySelector;
+import www.ontologyutils.repair.strategy.bad.BadAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelector;
 import www.ontologyutils.toolbox.*;
 
 /**
@@ -59,24 +62,48 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
      * adding more data using axiom weakening.
      */
     protected boolean enhanceRef;
+    // Strategy selectors (can be provided explicitly or constructed from enums)
+    protected final RefOntologySelector refSelector;
+    protected final BadAxiomSelector badSelector;
+    protected final WeakerAxiomSelector weakerSelector;
 
     /**
-     * @param isRepaired
-     *            The monotone predicate testing whether an ontology is repaired.
-     * @param refOntologySource
-     *            The strategy for computing the reference ontology.
-     * @param badAxiomSource
-     *            The strategy for computing bad axioms.
-     * @param weakeningFlags
-     *            The flags to use for weakening
-     * @param enhanceRef
-     *            Use the reference ontology as a base ontology that is always
-     *            included in the repair.
+     * Backwards-compatible constructor accepting enums. It constructs selector
+     * implementations and delegates to the selector-based constructor.
      */
     public OntologyRepairWeakening(Predicate<Ontology> isRepaired, RefOntologyStrategy refOntologySource,
             BadAxiomStrategy badAxiomSource, int weakeningFlags, boolean enhanceRef) {
         super(isRepaired, badAxiomSource);
         this.refOntologySource = refOntologySource;
+        // construct selectors from enums
+        this.refSelector = new www.ontologyutils.repair.strategy.ref.McsRefOntologySelector(refOntologySource);
+        this.badSelector = new BadAxiomSelector() {
+            @Override
+            public java.util.Optional<org.semanticweb.owlapi.model.OWLAxiom> selectBest(Ontology ontology, java.util.function.Predicate<Ontology> isRepaired) {
+                var list = Utils.toList(findBadAxioms(ontology));
+                if (list.isEmpty()) return java.util.Optional.empty();
+                return java.util.Optional.of(Utils.randomChoice(list));
+            }
+        };
+        this.weakerSelector = new www.ontologyutils.repair.strategy.weaker.RandomWeakerAxiomSelector();
+        this.weakeningFlags = weakeningFlags;
+        this.enhanceRef = enhanceRef;
+    }
+
+    /**
+     * Primary constructor accepting explicit selector strategies.
+     */
+    public OntologyRepairWeakening(Predicate<Ontology> isRepaired,
+            RefOntologySelector refSelector,
+            BadAxiomSelector badSelector,
+            WeakerAxiomSelector weakerSelector,
+            int weakeningFlags,
+            boolean enhanceRef) {
+        super(isRepaired, null);
+        this.refOntologySource = RefOntologyStrategy.ONE_MCS;
+        this.refSelector = refSelector;
+        this.badSelector = badSelector;
+        this.weakerSelector = weakerSelector;
         this.weakeningFlags = weakeningFlags;
         this.enhanceRef = enhanceRef;
     }
@@ -143,37 +170,8 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
      *         repairs.
      */
     public Stream<Set<OWLAxiom>> getRefAxioms(Ontology ontology) {
-        switch (refOntologySource) {
-            case INTERSECTION_OF_MCS: {
-                return Stream.of(mcsPeekInfo(false, ontology.maximalConsistentSubsets(isRepaired)).reduce((a, b) -> {
-                    a.removeIf(axiom -> !b.contains(axiom));
-                    return a;
-                }).get());
-            }
-            case INTERSECTION_OF_SOME_MCS: {
-                return Stream
-                        .of(mcsPeekInfo(false, ontology.someMaximalConsistentSubsets(isRepaired)).reduce((a, b) -> {
-                            a.removeIf(axiom -> !b.contains(axiom));
-                            return a;
-                        }).get());
-            }
-            case LARGEST_MCS:
-                return mcsPeekInfo(false, ontology.largestMaximalConsistentSubsets(isRepaired));
-            case RANDOM_MCS:
-                return mcsPeekInfo(false, ontology.maximalConsistentSubsets(isRepaired));
-            case SOME_MCS:
-                return mcsPeekInfo(false, ontology.someMaximalConsistentSubsets(isRepaired));
-            case ONE_MCS: {
-                var mcs = ontology.maximalConsistentSubset(isRepaired);
-                if (mcs == null) {
-                    return Stream.of();
-                } else {
-                    return Stream.of(mcs);
-                }
-            }
-            default:
-                throw new IllegalArgumentException("Unimplemented reference ontology choice strategy.");
-        }
+        if (refSelector == null) return Stream.of();
+        return refSelector.select(ontology, isRepaired);
     }
 
     @Override
@@ -186,13 +184,17 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
         try (var refOntology = ontology.cloneWithRefutable(refAxioms).withSeparateCache()) {
             var axiomWeakener = getWeakener(refOntology, ontology);
             while (!isRepaired(ontology)) {
-                var badAxioms = Utils.toList(findBadAxioms(ontology));
-                infoMessage("Found " + badAxioms.size() + " possible bad axioms.");
-                var badAxiom = Utils.randomChoice(badAxioms);
+                var maybeBad = badSelector.selectBest(ontology, isRepaired);
+                if (maybeBad.isEmpty()) {
+                    throw new IllegalStateException("Could not find a bad axiom in ontology.");
+                }
+                var badAxiom = maybeBad.get();
                 infoMessage("Selected the bad axiom " + Utils.prettyPrintAxiom(badAxiom) + ".");
-                var weakerAxioms = Utils.toList(axiomWeakener.weakerAxioms(badAxiom));
-                infoMessage("Found " + weakerAxioms.size() + " weaker axioms.");
-                var weakerAxiom = Utils.randomChoice(weakerAxioms);
+                var maybeWeaker = weakerSelector.selectBest(badAxiom, axiomWeakener, ontology.refutableAxioms().collect(Collectors.toSet()));
+                if (maybeWeaker.isEmpty()) {
+                    throw new IllegalStateException("Could not find a weakening for axiom: " + Utils.prettyPrintAxiomDL(badAxiom));
+                }
+                var weakerAxiom = maybeWeaker.get();
                 infoMessage("Selected the weaker axiom " + Utils.prettyPrintAxiom(weakerAxiom) + ".");
                 ontology.replaceAxiom(badAxiom, weakerAxiom);
             }
@@ -217,16 +219,20 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
                     copy.addStaticAxioms(refAxioms);
                 }
                 while (!isRepaired(copy)) {
-                    var badAxioms = Utils.toList(findBadAxioms(copy));
-                    infoMessage("Found " + badAxioms.size() + " possible bad axioms.");
-                    var badAxiom = Utils.randomChoice(badAxioms);
+                    var maybeBad = badSelector.selectBest(copy, isRepaired);
+                    if (maybeBad.isEmpty()) {
+                        throw new IllegalStateException("Could not find a bad axiom in ontology.");
+                    }
+                    var badAxiom = maybeBad.get();
                     infoMessage("Selected the bad axiom " + Utils.prettyPrintAxiom(badAxiom) + ".");
-                    var weakerAxioms = Utils.toList(axiomWeakener.weakerAxioms(badAxiom));
-                    infoMessage("Found " + weakerAxioms.size() + " weaker axioms.");
-                    var weakerAxiom = Utils.randomChoice(weakerAxioms);
+                    var maybeWeaker = weakerSelector.selectBest(badAxiom, axiomWeakener, copy.refutableAxioms().collect(Collectors.toSet()));
+                    if (maybeWeaker.isEmpty()) {
+                        throw new IllegalStateException("Could not find a weakening for axiom: " + Utils.prettyPrintAxiomDL(badAxiom));
+                    }
+                    var weakerAxiom = maybeWeaker.get();
                     infoMessage("Selected the weaker axiom " + Utils.prettyPrintAxiom(weakerAxiom) + ".");
                     copy.replaceAxiom(badAxiom, weakerAxiom);
-                }
+                 }
                 infoMessage("Found repair.");
                 return copy;
             } catch (OutOfMemoryError e) {

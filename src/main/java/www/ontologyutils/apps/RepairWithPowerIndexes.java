@@ -4,7 +4,7 @@ import java.util.*;
 
 import www.ontologyutils.refinement.AxiomWeakener;
 import www.ontologyutils.repair.*;
-import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.RefOntologyStrategy;
+import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
 import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.BadAxiomStrategy;
 import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.WeakerAxiomStrategy;
 import www.ontologyutils.toolbox.Ontology;
@@ -115,25 +115,25 @@ public class RepairWithPowerIndexes extends RepairApp {
 
     @Override
     protected OntologyRepair getRepair() {
-        // PowerIndex powerIndex = "exact".equals(powerIndexType)
-        //         ? new ShapleyInconsistencyValueExact()
-        //         : new ShapleyInconsistencyValueApproximate();
-
-        // return new OntologyRepairWithPowerIndexes(
-        //         coherence ? Ontology::isCoherent : Ontology::isConsistent,
-        //         refOntologyStrategy,
-        //         badAxiomStrategy,
-        //         weakeningFlags,
-        //         enhanceRef,
-        //         powerIndex);
-        return new OntologyRepairWithPowerIndexes(
-                coherence ? Ontology::isCoherent : Ontology::isConsistent,
-                refOntologyStrategy,
-                badAxiomStrategy,
-                weakerAxiomStrategy,
-                weakeningFlags,
-                enhanceRef
-        );
+        var builder = coherence ? OntologyRepairBuilder.forCoherence() : OntologyRepairBuilder.forConsistency();
+        builder.withRefStrategy(refOntologyStrategy);
+        builder.withWeakeningFlags(weakeningFlags);
+        builder.withEnhanceRef(enhanceRef);
+        // Map power-index selection to PowerIndexType if requested
+        switch (badAxiomStrategy) {
+            case SHAPLEY_EXACT -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.SHAPLEY_EXACT);
+            case SHAPLEY_APPROXIMATE -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.SHAPLEY_APPROXIMATE);
+            case BANZHAF_APPROXIMATE -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.BANZHAF_APPROXIMATE);
+            default -> {
+                // no-op: use default bad-axiom selector
+            }
+        }
+        // For weaker strategy we prefer to use the same power-index type when applicable
+        switch (weakerAxiomStrategy) {
+            case SHAPLEY_EXACT, SHAPLEY_APPROXIMATE, BANZHAF_APPROXIMATE -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.valueOf(weakerAxiomStrategy.name()));
+            default -> {}
+        }
+        return builder.build();
     }
 
     /**
@@ -147,4 +147,3 @@ public class RepairWithPowerIndexes extends RepairApp {
         (new RepairWithPowerIndexes()).launch(args);
     }
 }
-

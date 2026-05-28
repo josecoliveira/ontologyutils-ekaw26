@@ -7,6 +7,7 @@ import www.ontologyutils.repair.*;
 import www.ontologyutils.repair.OntologyRepairRemoval.BadAxiomStrategy;
 import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
 import www.ontologyutils.toolbox.Ontology;
+import www.ontologyutils.repair.OntologyRepairBuilder;
 
 /**
  * Repair the given ontology using the axiom weakening repair algorithm.
@@ -109,8 +110,10 @@ public class RepairWeakening extends RepairApp {
 
     @Override
     protected OntologyRepair getRepair() {
-        return new OntologyRepairWeakening(coherence ? Ontology::isCoherent : Ontology::isConsistent,
-                refOntologyStrategy, badAxiomStrategy, weakeningFlags, enhanceRef);
+        var builder = coherence ? OntologyRepairBuilder.forCoherence() : OntologyRepairBuilder.forConsistency();
+        builder.withRefStrategy(refOntologyStrategy).withBadStrategy(badAxiomStrategy).withWeakeningFlags(weakeningFlags)
+                .withEnhanceRef(enhanceRef);
+        return builder.build();
     }
 
     /**

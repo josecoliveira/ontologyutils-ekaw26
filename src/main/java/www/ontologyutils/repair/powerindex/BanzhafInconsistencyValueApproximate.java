@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import org.semanticweb.owlapi.model.OWLAxiom;
 
 import www.ontologyutils.toolbox.Utils;
+import www.ontologyutils.toolbox.LruCache;
 
 /**
  * Computes an approximate Banzhaf inconsistency value for an axiom using Monte
@@ -25,7 +26,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
                 return thread;
             });
 
-    private final ConcurrentMap<Set<OWLAxiom>, Integer> drasticCache;
+    private final java.util.function.Function<Set<OWLAxiom>, Integer> drasticCached;
     private final int approximationSamples;
     private final long approximationSeed;
 
@@ -50,7 +51,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
         if (approximationSamples <= 0) {
             throw new IllegalArgumentException("Approximation samples must be positive: " + approximationSamples);
         }
-        this.drasticCache = new ConcurrentHashMap<>();
+        this.drasticCached = LruCache.wrapFunction(subset -> Utils.isConsistent(subset) ? 0 : 1, 16384);
         this.approximationSamples = approximationSamples;
         this.approximationSeed = approximationSeed;
     }
@@ -192,7 +193,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
 
     private int drasticInconsistencyValue(Set<OWLAxiom> subset) {
         Set<OWLAxiom> key = Set.copyOf(subset);
-        return drasticCache.computeIfAbsent(key, k -> Utils.isConsistent(k) ? 0 : 1);
+        return drasticCached.apply(key);
     }
 
     private Map<OWLAxiom, Double> sampleTargetsInParallel(List<OWLAxiom> orderedUniverse, Set<OWLAxiom> targets,
@@ -318,4 +319,3 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
         return mixed;
     }
 }
-
