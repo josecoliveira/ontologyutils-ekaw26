@@ -10,14 +10,6 @@
 
     <name>ontologyutils</name>
 
-    <distributionManagement>
-        <repository>
-            <id>github</id>
-            <name>GitHub rolandbernard Apache Maven Packages</name>
-            <url>https://maven.pkg.github.com/rolandbernard/ontologyutils</url>
-        </repository>
-    </distributionManagement>
-
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
