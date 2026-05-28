@@ -14,5 +14,6 @@ bin/
 tmp.*
 lib/
 !lib/factplusplus-1.7.0.3.jar
-analysis/
+analysis*/
 output/
+.idea/

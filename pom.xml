@@ -19,8 +19,7 @@
     </distributionManagement>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -37,8 +36,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <outputFile>
-                                ${project.build.directory}\shaded-${project.artifactId}-${project.version}.jar</outputFile>
+                            <outputFile>${project.build.directory}/shaded-${project.artifactId}-${project.version}.jar</outputFile>
                             <shadedArtifactAttached>false</shadedArtifactAttached>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
@@ -63,6 +61,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0</version>
                 <configuration>
+                    <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     <properties>
                         <configurationParameters>
                             junit.jupiter.execution.parallel.enabled=true
