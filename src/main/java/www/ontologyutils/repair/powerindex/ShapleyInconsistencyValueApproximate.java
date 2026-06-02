@@ -17,7 +17,7 @@ import www.ontologyutils.toolbox.LruCache;
 public class ShapleyInconsistencyValueApproximate implements PowerIndex {
     private static final int DEFAULT_APPROXIMATION_SAMPLES = 735;
     private static final long DEFAULT_APPROXIMATION_SEED = 13L;
-    private static final int PARALLEL_SAMPLING_THREADS = 6;
+    private static final int PARALLEL_SAMPLING_THREADS = 8;
     private static final ExecutorService SAMPLING_EXECUTOR = Executors.newFixedThreadPool(PARALLEL_SAMPLING_THREADS,
             runnable -> {
                 Thread thread = new Thread(runnable);

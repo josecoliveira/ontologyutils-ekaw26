@@ -13,10 +13,15 @@ import www.ontologyutils.normalization.SroiqNormalization;
 import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
 import www.ontologyutils.repair.OntologyRepairBuilder;
-import www.ontologyutils.repair.powerindex.PowerIndexType;
 import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
-import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.BadAxiomStrategy;
-import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.WeakerAxiomStrategy;
+import www.ontologyutils.repair.powerindex.PowerIndexRegistry;
+import www.ontologyutils.repair.powerindex.PowerIndexType;
+import www.ontologyutils.repair.strategy.bad.BadAxiomSelector;
+import www.ontologyutils.repair.strategy.bad.DefaultBadAxiomSelector;
+import www.ontologyutils.repair.strategy.bad.PowerIndexBadAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.PowerIndexWeakerAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.RandomWeakerAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelector;
 import www.ontologyutils.toolbox.*;
 
 /**
@@ -34,6 +39,57 @@ import www.ontologyutils.toolbox.*;
 public class SingleTrialExperiment {
     private final OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
 
+    private static final List<String> A_REPAIRS = List.of("A1", "A2", "A3");
+
+    private enum BadSelectorKind {
+        IN_SOME_MUS,
+        SHAPLEY,
+        BANZHAF
+    }
+
+    private enum WeakerSelectorKind {
+        RANDOM,
+        SHAPLEY,
+        BANZHAF
+    }
+
+    private static final class BRepairSpec {
+        final String id;
+        final BadSelectorKind badSelector;
+        final WeakerSelectorKind weakerSelector;
+
+        BRepairSpec(String id, BadSelectorKind badSelector, WeakerSelectorKind weakerSelector) {
+            this.id = id;
+            this.badSelector = badSelector;
+            this.weakerSelector = weakerSelector;
+        }
+    }
+
+    private static final List<BRepairSpec> B_REPAIR_SPECS = List.of(
+            new BRepairSpec("B1", BadSelectorKind.IN_SOME_MUS, WeakerSelectorKind.RANDOM),
+            new BRepairSpec("B2", BadSelectorKind.IN_SOME_MUS, WeakerSelectorKind.SHAPLEY),
+            new BRepairSpec("B3", BadSelectorKind.IN_SOME_MUS, WeakerSelectorKind.BANZHAF),
+            new BRepairSpec("B4", BadSelectorKind.SHAPLEY, WeakerSelectorKind.RANDOM),
+            new BRepairSpec("B5", BadSelectorKind.SHAPLEY, WeakerSelectorKind.SHAPLEY),
+            new BRepairSpec("B6", BadSelectorKind.SHAPLEY, WeakerSelectorKind.BANZHAF),
+            new BRepairSpec("B7", BadSelectorKind.BANZHAF, WeakerSelectorKind.RANDOM),
+            new BRepairSpec("B8", BadSelectorKind.BANZHAF, WeakerSelectorKind.SHAPLEY),
+            new BRepairSpec("B9", BadSelectorKind.BANZHAF, WeakerSelectorKind.BANZHAF));
+
+    private static final class RepairPlan {
+        final String id;
+        final String label;
+        final Supplier<? extends OntologyRepair> supplier;
+        final long timeoutSeconds;
+
+        RepairPlan(String id, String label, Supplier<? extends OntologyRepair> supplier, long timeoutSeconds) {
+            this.id = id;
+            this.label = label;
+            this.supplier = supplier;
+            this.timeoutSeconds = timeoutSeconds;
+        }
+    }
+
     private static final class TrialResult {
         long seed;
         String runId;
@@ -41,13 +97,8 @@ public class SingleTrialExperiment {
         String errorType;
         String failureStage;
         String errorMessage;
-        Double iicPowerVsRandom;
-        Double iicPowerVsMcs;
-        Double iicPowerVsWeak;
-        Long randomRemovalMs;
-        Long notInLargestMcsRemovalMs;
-        Long weakeningMs;
-        Long powerIndexMs;
+        Map<String, Double> iicValues = new LinkedHashMap<>();
+        Map<String, Long> repairRuntimesMs = new LinkedHashMap<>();
     }
 
     @FunctionalInterface
@@ -84,6 +135,46 @@ public class SingleTrialExperiment {
                         | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS)
                 .withEnhanceRef(false)
                 .build();
+    }
+
+    private OntologyRepair createBRepair(BadSelectorKind badSelectorKind, WeakerSelectorKind weakerSelectorKind) {
+        BadAxiomSelector badSelector = switch (badSelectorKind) {
+            case IN_SOME_MUS -> new DefaultBadAxiomSelector(OntologyRepairRemoval.BadAxiomStrategy.IN_SOME_MUS);
+            case SHAPLEY -> new PowerIndexBadAxiomSelector(PowerIndexRegistry.create(PowerIndexType.SHAPLEY_APPROXIMATE));
+            case BANZHAF -> new PowerIndexBadAxiomSelector(PowerIndexRegistry.create(PowerIndexType.BANZHAF_APPROXIMATE));
+        };
+
+        WeakerAxiomSelector weakerSelector = switch (weakerSelectorKind) {
+            case RANDOM -> new RandomWeakerAxiomSelector();
+            case SHAPLEY -> new PowerIndexWeakerAxiomSelector(PowerIndexRegistry.create(PowerIndexType.SHAPLEY_APPROXIMATE));
+            case BANZHAF -> new PowerIndexWeakerAxiomSelector(PowerIndexRegistry.create(PowerIndexType.BANZHAF_APPROXIMATE));
+        };
+
+        return OntologyRepairBuilder.forConsistency()
+                .withRefStrategy(RefOntologyStrategy.ONE_MCS)
+                .withBadSelector(badSelector)
+                .withWeakerSelector(weakerSelector)
+                .withWeakeningFlags(AxiomStrengthener.FLAG_SROIQ_STRICT | AxiomStrengthener.FLAG_SIMPLE_ROLES_STRICT
+                        | AxiomStrengthener.FLAG_RIA_ONLY_SIMPLE | AxiomStrengthener.FLAG_ALC_STRICT
+                        | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS)
+                .withEnhanceRef(false)
+                .build();
+    }
+
+    private List<RepairPlan> buildRepairPlans(long removalTimeout, long weakeningTimeout, long powerIndexTimeout) {
+        var plans = new ArrayList<RepairPlan>();
+        plans.add(new RepairPlan("A1", "random-removal", this::createRandomRemovalRepair, removalTimeout));
+        plans.add(new RepairPlan("A2", "not-in-largest-mcs-removal", this::createLargestMcsRemovalRepair, removalTimeout));
+        plans.add(new RepairPlan("A3", "default-weakening", this::createWeakeningRepair, weakeningTimeout));
+        for (var bSpec : B_REPAIR_SPECS) {
+            plans.add(new RepairPlan(
+                    bSpec.id,
+                    "bad-" + bSpec.badSelector.name().toLowerCase(Locale.ROOT) + "-weaker-"
+                            + bSpec.weakerSelector.name().toLowerCase(Locale.ROOT),
+                    () -> createBRepair(bSpec.badSelector, bSpec.weakerSelector),
+                    powerIndexTimeout));
+        }
+        return plans;
     }
 
     private String extractErrorMessage(Throwable e) {
@@ -309,8 +400,24 @@ public class SingleTrialExperiment {
         }
     }
 
+    private static void appendJsonNumberMap(StringBuilder sb, String key, Map<String, ? extends Number> values, boolean comma) {
+        sb.append('"').append(jsonEscape(key)).append('"').append(':').append('{');
+        boolean first = true;
+        for (var entry : values.entrySet()) {
+            if (!first) {
+                sb.append(',');
+            }
+            appendJsonField(sb, entry.getKey(), entry.getValue(), false);
+            first = false;
+        }
+        sb.append('}');
+        if (comma) {
+            sb.append(',');
+        }
+    }
+
     private static String trialResultToJson(TrialResult result) {
-        var sb = new StringBuilder(512);
+        var sb = new StringBuilder(2048);
         sb.append('{');
         appendJsonField(sb, "seed", result.seed, true);
         appendJsonField(sb, "run_id", result.runId, true);
@@ -318,17 +425,8 @@ public class SingleTrialExperiment {
         appendJsonField(sb, "error_type", result.errorType, true);
         appendJsonField(sb, "failure_stage", result.failureStage, true);
         appendJsonField(sb, "error_message", result.errorMessage, true);
-        sb.append('"').append("iic_values").append('"').append(':').append('{');
-        appendJsonField(sb, "power_vs_random", result.iicPowerVsRandom, true);
-        appendJsonField(sb, "power_vs_not_in_largest_mcs", result.iicPowerVsMcs, true);
-        appendJsonField(sb, "power_vs_weakening", result.iicPowerVsWeak, false);
-        sb.append('}').append(',');
-        sb.append('"').append("repair_runtimes_ms").append('"').append(':').append('{');
-        appendJsonField(sb, "random_removal", result.randomRemovalMs, true);
-        appendJsonField(sb, "not_in_largest_mcs_removal", result.notInLargestMcsRemovalMs, true);
-        appendJsonField(sb, "weakening", result.weakeningMs, true);
-        appendJsonField(sb, "power_index", result.powerIndexMs, false);
-        sb.append('}');
+        appendJsonNumberMap(sb, "iic_values", result.iicValues, true);
+        appendJsonNumberMap(sb, "repair_runtimes_ms", result.repairRuntimesMs, false);
         sb.append('}');
         return sb.toString();
     }
@@ -387,7 +485,7 @@ public class SingleTrialExperiment {
 
         long removalTimeout = parseLongArg(map, "removal-timeout-secs", 300L);
         long weakeningTimeout = parseLongArg(map, "weakening-timeout-secs", 300L);
-        long powerIndexTimeout = parseLongArg(map, "power-index-timeout-secs", 60L);
+        long powerIndexTimeout = parseLongArg(map, "power-index-timeout-secs", 300L);
         long makeInconsistentTimeout = parseLongArg(map, "make-inconsistent-timeout-secs", 300L);
 
         app.log("SingleTrialExperiment starting: ontology=" + ontologyPath + ", seed=" + seed + ", run_id=" + runId);
@@ -411,54 +509,53 @@ public class SingleTrialExperiment {
                 app.log("Ontology is already inconsistent, skipping make-inconsistent step.");
             }
 
-            try (var repairedRandom = ontology.cloneWithSeparateCache()) {
-                failureStage = "random_removal";
-                app.log("Repairing with removal (random)...");
-                app.runWithTiming(() -> app.applyRepairWithTimeout(app::createRandomRemovalRepair, repairedRandom,
-                        "removal-random", removalTimeout, seed + 1), duration -> result.randomRemovalMs = duration);
+            var repairPlans = app.buildRepairPlans(removalTimeout, weakeningTimeout, powerIndexTimeout);
+            var repairedOntologies = new LinkedHashMap<String, Ontology>();
+            long repairSeed = seed + 1;
 
-                try (var repairedMcs = ontology.cloneWithSeparateCache()) {
-                    failureStage = "not_in_largest_mcs_removal";
-                    app.log("Repairing with removal (not-in-largest-mcs)...");
-                    app.runWithTiming(() -> app.applyRepairWithTimeout(app::createLargestMcsRemovalRepair, repairedMcs,
-                            "removal-not-in-largest-mcs", removalTimeout, seed + 2),
-                            duration -> result.notInLargestMcsRemovalMs = duration);
+            try {
+                for (var plan : repairPlans) {
+                    failureStage = plan.id;
+                    var repaired = ontology.cloneWithSeparateCache();
+                    repairedOntologies.put(plan.id, repaired);
+                    final long seedForRepair = repairSeed++;
+                    app.log("Repairing with " + plan.id + " (" + plan.label + ")...");
+                    app.runWithTiming(
+                            () -> app.applyRepairWithTimeout(plan.supplier, repaired, plan.id, plan.timeoutSeconds, seedForRepair),
+                            duration -> result.repairRuntimesMs.put(plan.id, duration));
+                }
 
-                    try (var repairedWeak = ontology.cloneWithSeparateCache()) {
-                        failureStage = "weakening";
-                        app.log("Repairing with weakening...");
-                        app.runWithTiming(() -> app.applyRepairWithTimeout(app::createWeakeningRepair, repairedWeak,
-                                "weakening", weakeningTimeout, seed + 3),
-                                duration -> result.weakeningMs = duration);
+                var subConcepts = app.collectSubConcepts(repairedOntologies.values().toArray(new Ontology[0]));
+                var inferredByRepair = new LinkedHashMap<String, Set<OWLAxiom>>();
+                for (var entry : repairedOntologies.entrySet()) {
+                    inferredByRepair.put(entry.getKey(), app.inferredAxioms(entry.getValue(), subConcepts));
+                }
 
-                        try (var repairedPower = ontology.cloneWithSeparateCache()) {
-                            failureStage = "power_index";
-                            app.log("Repairing with power index...");
-                            app.runWithTiming(() -> app.applyRepairWithTimeout(app::createPowerIndexRepair, repairedPower,
-                                    "power-index", powerIndexTimeout, seed + 4),
-                                    duration -> result.powerIndexMs = duration);
+                for (var bSpec : B_REPAIR_SPECS) {
+                    for (var aRepair : A_REPAIRS) {
+                        var iicKey = bSpec.id + "_vs_" + aRepair;
+                        var iicValue = Ontology.relativeInformationContent(
+                                inferredByRepair.get(bSpec.id),
+                                inferredByRepair.get(aRepair));
+                        result.iicValues.put(iicKey, iicValue);
+                        app.log("IIC (" + bSpec.id + " wrt " + aRepair + "): " + iicValue);
+                    }
+                }
 
-                            var subConcepts = app.collectSubConcepts(repairedRandom, repairedMcs, repairedWeak, repairedPower);
-                            var inferredRandom = app.inferredAxioms(repairedRandom, subConcepts);
-                            var inferredMcs = app.inferredAxioms(repairedMcs, subConcepts);
-                            var inferredWeak = app.inferredAxioms(repairedWeak, subConcepts);
-                            var inferredPower = app.inferredAxioms(repairedPower, subConcepts);
+                result.trialStatus = "success";
+                result.errorType = null;
+                result.failureStage = null;
+                result.errorMessage = null;
 
-                            result.iicPowerVsRandom = Ontology.relativeInformationContent(inferredPower, inferredRandom);
-                            result.iicPowerVsMcs = Ontology.relativeInformationContent(inferredPower, inferredMcs);
-                            result.iicPowerVsWeak = Ontology.relativeInformationContent(inferredPower, inferredWeak);
-                            result.trialStatus = "success";
-                            result.errorType = null;
-                            result.failureStage = null;
-                            result.errorMessage = null;
-
-                            app.log("IIC (Power index wrt Random removal): " + result.iicPowerVsRandom);
-                            app.log("IIC (Power index wrt Not-in-largest-MCS removal): " + result.iicPowerVsMcs);
-                            app.log("IIC (Power index wrt Weakening): " + result.iicPowerVsWeak);
-                            app.log("SingleTrialExperiment completed successfully.");
-                            app.printTrialResult(result);
-                            return;
-                        }
+                app.log("SingleTrialExperiment completed successfully.");
+                app.printTrialResult(result);
+                return;
+            } finally {
+                for (var repairedOntology : repairedOntologies.values()) {
+                    try {
+                        repairedOntology.close();
+                    } catch (Exception e) {
+                        app.logErr("Failed to close repaired ontology: " + e.getMessage());
                     }
                 }
             }
@@ -486,9 +583,3 @@ public class SingleTrialExperiment {
         System.exit(0);
     }
 }
-
-
-
-
-
-
