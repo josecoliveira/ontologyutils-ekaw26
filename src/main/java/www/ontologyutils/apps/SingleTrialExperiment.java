@@ -31,6 +31,7 @@ import www.ontologyutils.toolbox.*;
  *   --ontology <path>  (required)
  *   --seed <long>      (required)
  *   --run-id <string>  (optional)
+ *   --verbose          (optional) enable infoMessage logging from repairs
  *   --removal-timeout-secs <int>
  *   --weakening-timeout-secs <int>
  *   --power-index-timeout-secs <int>
@@ -38,6 +39,7 @@ import www.ontologyutils.toolbox.*;
  */
 public class SingleTrialExperiment {
     private final OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private boolean verbose = false;
 
     private static final List<String> A_REPAIRS = List.of("A1", "A2", "A3");
 
@@ -224,7 +226,11 @@ public class SingleTrialExperiment {
         try {
             var future = executor.submit(() -> {
                 Utils.randomSeed(seed);
-                repairSupplier.get().apply(ontology);
+                var repair = repairSupplier.get();
+                if (verbose) {
+                    repair.setInfoCallback(this::logMessage);
+                }
+                repair.apply(ontology);
                 return null;
             });
             try {
@@ -345,6 +351,11 @@ public class SingleTrialExperiment {
         System.err.println(msg);
     }
 
+    private void logMessage(String msg) {
+        System.err.println("[" + java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")) + "] " + msg);
+    }
+
     private static long nanosToMillis(long nanos) {
         return TimeUnit.NANOSECONDS.toMillis(nanos);
     }
@@ -460,7 +471,9 @@ public class SingleTrialExperiment {
         Map<String, String> map = new HashMap<>();
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
-            if (a.startsWith("--") && i + 1 < args.length) {
+            if (a.equals("--verbose")) {
+                app.verbose = true;
+            } else if (a.startsWith("--") && i + 1 < args.length) {
                 map.put(a.substring(2), args[++i]);
             }
         }
@@ -470,7 +483,7 @@ public class SingleTrialExperiment {
         String runId = map.getOrDefault("run-id", "");
 
         if (ontologyPath == null || seedStr == null) {
-            System.err.println("Usage: SingleTrialExperiment --ontology <path> --seed <long> [--run-id <string>] [--removal-timeout-secs N] [--weakening-timeout-secs N] [--power-index-timeout-secs N] [--make-inconsistent-timeout-secs N]");
+            System.err.println("Usage: SingleTrialExperiment --ontology <path> --seed <long> [--run-id <string>] [--verbose] [--removal-timeout-secs N] [--weakening-timeout-secs N] [--power-index-timeout-secs N] [--make-inconsistent-timeout-secs N]");
             System.exit(2);
         }
 
