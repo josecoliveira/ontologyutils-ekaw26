@@ -1,0 +1,29 @@
+{
+    "name": "ontologyutils",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "remoteUser": "vscode",
+    "containerEnv": {
+        "SHELL": "/bin/bash"
+    },
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-azuretools.vscode-docker"
+            ],
+            "settings": {
+                "java.configuration.updateBuildConfiguration": "automatic",
+                "java.compile.nullAnalysis.mode": "disabled",
+                "python.defaultInterpreterPath": "${workspaceFolder}/repair-power-index-replication-ekaw26/.venv/bin/python",
+                "python.terminal.activateEnvironment": true,
+                "files.encoding": "utf8"
+            }
+        }
+    }
+}
