@@ -1,17 +1,15 @@
 #!/bin/bash
 # ------------------------------------------------------------------
 # Post-creation setup for ontologyutils Dev Container
-# Runs inside the container after it is created.
 # Steps:
 #   1. Install Fact++ jar into local Maven repository
-#   2. Fix workspace permissions (needed for bind-mounted volumes)
-#   3. Build the Java project (compile + test)
-#   4. Create Python virtual environment and install dependencies
+#   2. Build the Java project (compile only, skip tests)
+#   3. Create Python virtual environment and install dependencies
 # ------------------------------------------------------------------
 set -e
 
 echo "========================================"
-echo " Step 1/4: Installing Fact++ Maven dependency"
+echo " Step 1/3: Installing Fact++ Maven dependency"
 echo "========================================"
 mvn install:install-file \
     -Dfile=lib/factplusplus-1.7.0.3.jar \
@@ -23,19 +21,16 @@ mvn install:install-file \
 
 echo ""
 echo "========================================"
-echo " Step 2/4: Fixing workspace permissions"
+echo " Step 2/3: Building ontologyutils with Maven"
 echo "========================================"
-sudo chown -R vscode:vscode /workspaces/ontologyutils-ekaw26
-
-echo ""
-echo "========================================"
-echo " Step 3/4: Building ontologyutils with Maven"
-echo "========================================"
+# Allow container user to write to workspace (adds w permission for everyone, no ownership change)
+sudo chmod -R a+w /workspaces/ontologyutils-ekaw26 || true
+# Skip clean phase to avoid permission issues on bind-mounted volumes
 mvn package -DskipTests -q
 
 echo ""
 echo "========================================"
-echo " Step 4/4: Setting up Python virtual environment"
+echo " Step 3/3: Setting up Python virtual environment"
 echo "========================================"
 PYTHON_DIR="repair-power-index-replication-ekaw26"
 python3 -m venv "${PYTHON_DIR}/.venv"
