@@ -36,7 +36,7 @@ PYTHON_DIR="repair-power-index-replication-ekaw26"
 python3 -m venv "${PYTHON_DIR}/.venv"
 source "${PYTHON_DIR}/.venv/bin/activate"
 pip install --upgrade pip -q
-pip install -r "${PYTHON_DIR}/analysis/requirements.txt" -q
+pip install -r "${PYTHON_DIR}/requirements.txt" -q
 
 echo ""
 echo "========================================"
@@ -49,4 +49,4 @@ echo ""
 echo " Quick sanity check:"
 echo "   source ${PYTHON_DIR}/.venv/bin/activate"
 echo "   python -c \"import pandas; print('pandas', pandas.__version__)\""
-echo "   python ${PYTHON_DIR}/analysis/run_trials.py 1"
+echo "   python ${PYTHON_DIR}/run_trials.py 1"
