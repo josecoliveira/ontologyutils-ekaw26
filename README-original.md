@@ -73,7 +73,7 @@ Options:
   -V --extra-verbose       print even more information
   --limit=<integer>        number of repairs to generate
   --no-limit=<integer>     only stop once all repairs have been generated
-  --reasoner={fact++|hermit|jfact|openllet}
+  --reasoner={hermit|jfact|openllet}
                            the reasoner to use
   --coherence              make the ontology coherent
   --fast                   use fast methods for selection

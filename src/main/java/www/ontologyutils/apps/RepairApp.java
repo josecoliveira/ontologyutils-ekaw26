@@ -7,7 +7,6 @@ import org.semanticweb.owlapi.model.OWLAxiom;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 import openllet.owlapi.OpenlletReasonerFactory;
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.normalization.NnfNormalization;
 import www.ontologyutils.normalization.SroiqNormalization;
@@ -23,7 +22,7 @@ public abstract class RepairApp extends App {
     private boolean normalizeSroiq = false;
     private boolean normalizeNnf = false;
     private boolean repair = true;
-    private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private OWLReasonerFactory reasonerFactory = new ReasonerFactory();
     private int limit = 0;
     private int verbose = 0;
 
@@ -60,8 +59,7 @@ public abstract class RepairApp extends App {
         options.add(OptionType.options(
                 Map.of("hermit", new ReasonerFactory(),
                         "jfact", new JFactFactory(),
-                        "openllet", OpenlletReasonerFactory.getInstance(),
-                        "fact++", new FaCTPlusPlusReasonerFactory()))
+                        "openllet", OpenlletReasonerFactory.getInstance()))
                 .create("reasoner", r -> reasonerFactory = r, "the reasoner to use"));
         return options;
     }

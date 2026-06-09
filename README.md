@@ -7,11 +7,7 @@ This repository contains the source code for the ontology repair prototype used 
 - Java 17
 - Maven
 
-The build expects the Fact++ dependency at `lib/factplusplus-1.7.0.3.jar`. The jar is committed in this checkout, but you can also install it into your local Maven repository:
-
-```bash
-mvn install:install-file -Dfile=lib/factplusplus-1.7.0.3.jar -DgroupId=ontologyutils -DartifactId=factplusplus -Dversion=1.7.0.3 -Dpackaging=jar
-```
+The project uses HermiT as the default reasoner. JFact and Openllet are also available as alternatives.
 
 ## Build
 

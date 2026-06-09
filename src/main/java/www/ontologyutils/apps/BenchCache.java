@@ -6,7 +6,6 @@ import org.semanticweb.HermiT.ReasonerFactory;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 import openllet.owlapi.OpenlletReasonerFactory;
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.refinement.*;
 import www.ontologyutils.toolbox.*;
@@ -19,7 +18,7 @@ public class BenchCache extends App {
     private int runs;
     private int groupSize;
     private int weakeningFlags = AxiomWeakener.FLAG_DEFAULT;
-    private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private OWLReasonerFactory reasonerFactory = new ReasonerFactory();
 
     @Override
     protected List<Option<?>> appOptions() {
@@ -44,8 +43,7 @@ public class BenchCache extends App {
         options.add(OptionType.options(
                 Map.of("hermit", new ReasonerFactory(),
                         "jfact", new JFactFactory(),
-                        "openllet", OpenlletReasonerFactory.getInstance(),
-                        "fact++", new FaCTPlusPlusReasonerFactory()))
+                        "openllet", OpenlletReasonerFactory.getInstance()))
                 .create("reasoner", r -> reasonerFactory = r, "the reasoner to use"));
         options.add(OptionType.options(
                 Map.of("troquard2018", 2018,

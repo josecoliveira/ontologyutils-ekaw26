@@ -15,7 +15,6 @@ import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 import openllet.owlapi.OpenlletReasonerFactory;
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.normalization.SroiqNormalization;
 import www.ontologyutils.repair.OntologyRepairBuilder;
@@ -41,7 +40,7 @@ public class RepairComparisonExperiment extends App {
     private static final long MAKE_INCONSISTENT_TIMEOUT_SECONDS = 300L;
 
     private final List<String> inputFiles = new ArrayList<>();
-    private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private OWLReasonerFactory reasonerFactory = new ReasonerFactory();
     private int initialSuccessfulTrials = 0;
     private int initialAttemptedTrials = 0;
 
@@ -53,8 +52,7 @@ public class RepairComparisonExperiment extends App {
         options.add(OptionType.options(
                 Map.of("hermit", new ReasonerFactory(),
                         "jfact", new JFactFactory(),
-                        "openllet", OpenlletReasonerFactory.getInstance(),
-                        "fact++", new FaCTPlusPlusReasonerFactory()))
+                        "openllet", OpenlletReasonerFactory.getInstance()))
                 .create("reasoner", r -> reasonerFactory = r, "the reasoner to use"));
         options.add(OptionType.UINT.create("start-successful-trials", n -> initialSuccessfulTrials = n,
                 "successful trials already completed for the current ontology"));

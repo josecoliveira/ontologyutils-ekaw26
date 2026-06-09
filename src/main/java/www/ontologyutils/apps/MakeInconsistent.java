@@ -7,7 +7,6 @@ import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 import openllet.owlapi.OpenlletReasonerFactory;
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 
 import www.ontologyutils.normalization.SroiqNormalization;
@@ -19,7 +18,7 @@ import www.ontologyutils.toolbox.*;
  * axioms.
  */
 public class MakeInconsistent extends App {
-    private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private OWLReasonerFactory reasonerFactory = new ReasonerFactory();
     private int strengtheningFlags = AxiomStrengthener.FLAG_DEFAULT;
     private String inputFile;
     private String outputFile = null;
@@ -70,8 +69,7 @@ public class MakeInconsistent extends App {
         options.add(OptionType.options(
                 Map.of("hermit", new ReasonerFactory(),
                         "jfact", new JFactFactory(),
-                        "openllet", OpenlletReasonerFactory.getInstance(),
-                        "fact++", new FaCTPlusPlusReasonerFactory()))
+                        "openllet", OpenlletReasonerFactory.getInstance()))
                 .create("reasoner", r -> reasonerFactory = r, "the reasoner to use"));
         options.add(OptionType.FLAG.create('v', "verbose", b -> verbose = true, "print more information"));
         options.add(OptionType.UINT.create("min-iter", i -> minIter = i, "minimum number of iterations to perform"));

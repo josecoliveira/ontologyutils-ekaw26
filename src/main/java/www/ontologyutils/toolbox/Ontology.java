@@ -13,7 +13,6 @@ import org.semanticweb.owlapi.reasoner.*;
 import org.semanticweb.owlapi.util.*;
 
 import openllet.owlapi.OpenlletReasonerFactory;
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 
 /**
@@ -27,7 +26,7 @@ import uk.ac.manchester.cs.jfact.JFactFactory;
  */
 public class Ontology implements AutoCloseable {
     private static final OWLOntologyManager defaultManager = OWLManager.createConcurrentOWLOntologyManager();
-    private static final OWLReasonerFactory defaultFactory = new FaCTPlusPlusReasonerFactory();
+    private static final OWLReasonerFactory defaultFactory = new ReasonerFactory();
     /**
      * This is only here for statistics
      */
@@ -1308,16 +1307,6 @@ public class Ontology implements AutoCloseable {
     }
 
     /**
-     * Clone this ontology, but give it a cache using the FaCT++ reasoner.
-     *
-     * @return The new ontology.
-     */
-    public Ontology cloneWithFactPP() {
-        var newReasonerCache = new ReasonerCache(new FaCTPlusPlusReasonerFactory());
-        return new Ontology(staticAxioms, refutableAxioms, newReasonerCache);
-    }
-
-    /**
      * Clone this ontology, but only axioms in {@code axioms}.
      *
      * @param axioms
@@ -1401,17 +1390,6 @@ public class Ontology implements AutoCloseable {
     public Ontology withJFact() {
         try (var current = this) {
             return this.cloneWithJFact();
-        }
-    }
-
-    /**
-     * Close this ontology, and return a new one using the FaCT++ reasoner.
-     *
-     * @return The new ontology.
-     */
-    public Ontology withFactPP() {
-        try (var current = this) {
-            return this.cloneWithFactPP();
         }
     }
 

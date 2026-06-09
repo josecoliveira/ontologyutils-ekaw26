@@ -5,10 +5,9 @@ import java.util.concurrent.*;
 import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
+import org.semanticweb.HermiT.ReasonerFactory;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
-
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import www.ontologyutils.normalization.SroiqNormalization;
 import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
@@ -38,7 +37,7 @@ import www.ontologyutils.toolbox.*;
  *   --make-inconsistent-timeout-secs <int>
  */
 public class SingleTrialExperiment {
-    private final OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private final OWLReasonerFactory reasonerFactory = new ReasonerFactory();
     private boolean verbose = false;
 
     private static final List<String> A_REPAIRS = List.of("A1", "A2", "A3");

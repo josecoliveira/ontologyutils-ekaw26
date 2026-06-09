@@ -8,7 +8,6 @@ import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 import openllet.owlapi.OpenlletReasonerFactory;
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.toolbox.*;
 
@@ -20,7 +19,7 @@ public class EvaluateRepairs extends App {
     private List<String> inputFiles = new ArrayList<>();
     private boolean extended = false;
     private boolean iicPairs = false;
-    private OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private OWLReasonerFactory reasonerFactory = new ReasonerFactory();
 
     @Override
     protected List<Option<?>> appOptions() {
@@ -36,8 +35,7 @@ public class EvaluateRepairs extends App {
         options.add(OptionType.options(
                 Map.of("hermit", new ReasonerFactory(),
                         "jfact", new JFactFactory(),
-                        "openllet", OpenlletReasonerFactory.getInstance(),
-                        "fact++", new FaCTPlusPlusReasonerFactory()))
+                        "openllet", OpenlletReasonerFactory.getInstance()))
                 .create("reasoner", r -> reasonerFactory = r, "the reasoner to use"));
         return options;
     }
