@@ -1,0 +1,146 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "type": "java",
+            "name": "ClassifyOntology",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.ClassifyOntology",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/inconsistent/elig.owl"
+        },
+        {
+            "type": "java",
+            "name": "CleanupOntology",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.CleanupOntology",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/original/xao.owl --output src/test/resources/ekaw26/cleanup/xao.owl"
+        },
+        {
+            "type": "java",
+            "name": "MakeInconsistent",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.MakeInconsistent",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/cleanup/xao.owl --output src/test/resources/ekaw26/inconsistent/xao.owl --normalize --basic-cache --strict-sroiq --strict-simple-roles --simple-ria-weakening --strict-owl2 --verbose"
+        },
+        {
+            "type": "java",
+            "name": "dangerous-example shapley exact",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexes",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/inconsistent/dangerous-example.owl --preset troquard2018 --power-index-shapley-exact --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "dangerous-example shapley exact (interactive)",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexesInteractive",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/inconsistent/dangerous-example.owl --preset troquard2018-shapley-exact --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "elig shapley approx",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexes",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/original/elig.owl --preset troquard2018 --power-index-shapley-approximate --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "leftpolicies-ok shapley exact",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexes",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/inconsistent/leftpolicies-ok.owl --preset troquard2018 --power-index-shapley-exact --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "leftpolicies-ok shapley exact (interactive)",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexesInteractive",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/inconsistent/paper-example.owl --preset troquard2018-shapley-exact --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "leftpolicies shapley approximate",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexes",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/inconsistent/taxrank.owl --preset troquard2018 --power-index-shapley-approximate --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "leftpolicies shapley exact",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexes",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/inconsistent/paper-example.owl --preset troquard2018 --power-index-shapley-exact --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "leftpolicies-small shapley exact",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexes",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/inconsistent/leftpolicies-small.owl --preset troquard2018 --power-index-shapley-exact --normalize --verbose"
+        },
+        {
+            "type": "java",
+            "name": "MakeInconsistent (bpt)",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.MakeInconsistent",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/inconsistent/bpt.owl --output src/test/resources/ekaw26/inconsistent/bpt.owl --normalize --basic-cache --strict-sroiq --strict-simple-roles --simple-ria-weakening --strict-owl2"
+        },
+        {
+            "type": "java",
+            "name": "MakeInconsistent (cctoo)",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.MakeInconsistent",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/inconsistent/cctoo.owl --output src/test/resources/ekaw26/inconsistent/cctoo.owl --normalize --basic-cache --strict-sroiq --strict-simple-roles --simple-ria-weakening --strict-owl2"
+        },
+        {
+            "type": "java",
+            "name": "pizza shapley approximate",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairWithPowerIndexes",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/inconsistent/pizza.owl --preset bernard2023 --power-index-shapley-approximate --verbose --normalize"
+        },
+        {
+            "type": "java",
+            "name": "RepairComparisonExperiment (xeo)",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairComparisonExperiment",
+            "projectName": "ontologyutils",
+            "args": "src/test/resources/ekaw26/cleanup/xeo.owl"
+        },
+        {
+            "type": "java",
+            "name": "RepairComparisonExperiment (debug vmArgs)",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.RepairComparisonExperiment",
+            "projectName": "ontologyutils",
+            "vmArgs": "-Dontologyutils.powerindex.debug=true -Xms1g -Xmx8g -Xss8m --enable-native-access=ALL-UNNAMED"
+        },
+        {
+            "type": "java",
+            "name": "SingleTrialExperiment (elig seed 13)",
+            "request": "launch",
+            "mainClass": "www.ontologyutils.apps.SingleTrialExperiment",
+            "projectName": "ontologyutils",
+            "args": "--ontology src/test/resources/ekaw26/cleanup/elig.owl --seed 13 --out src/test/resources/ekaw26/cleanup/elig.csv",
+            "vmArgs": "-Xms1g -Xmx8g -Xss8m --enable-native-access=ALL-UNNAMED"
+        }
+    ]
+}
