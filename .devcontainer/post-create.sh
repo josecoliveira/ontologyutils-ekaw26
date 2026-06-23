@@ -2,8 +2,9 @@
 set -e
 
 echo "=== Installing Python dependencies ==="
-python3 -m pip install --upgrade pip
-python3 -m pip install -r repair-power-index-replication-ekaw26/requirements.txt
+# pip is pre-installed via Debian (v24.0); skip upgrade to avoid RECORD-file
+# errors from Debian-managed packages. 24.0 is recent enough for all deps.
+python3 -m pip install -r repair-power-index-replication-ekaw26/requirements.txt --break-system-packages
 
 echo "=== Building Java project (skipping tests for first build) ==="
 mvn clean package -DskipTests
