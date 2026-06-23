@@ -56,10 +56,7 @@
                     <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     <properties>
                         <configurationParameters>
-                            junit.jupiter.execution.parallel.enabled=true
-                            junit.jupiter.execution.parallel.config.strategy=fixed
-                            junit.jupiter.execution.parallel.config.fixed.parallelism=16
-                            junit.jupiter.execution.parallel.config.fixed.max-pool-size=64
+                            junit.jupiter.execution.parallel.enabled=false
                         </configurationParameters>
                     </properties>
                 </configuration>

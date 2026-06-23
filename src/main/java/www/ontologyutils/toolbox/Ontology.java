@@ -26,7 +26,7 @@ import uk.ac.manchester.cs.jfact.JFactFactory;
  */
 public class Ontology implements AutoCloseable {
     private static final OWLOntologyManager defaultManager = OWLManager.createConcurrentOWLOntologyManager();
-    private static final OWLReasonerFactory defaultFactory = new ReasonerFactory();
+    private static final OWLReasonerFactory defaultFactory = new JFactFactory();
     /**
      * This is only here for statistics
      */

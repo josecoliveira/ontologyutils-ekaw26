@@ -5,14 +5,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import org.junit.jupiter.api.parallel.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
 import org.semanticweb.owlapi.model.*;
 
 import www.ontologyutils.toolbox.Ontology;
 
-@Execution(ExecutionMode.CONCURRENT)
 public class ConceptNormalizationTest {
     private static Stream<Arguments> testAxioms() {
         var df = Ontology.getDefaultDataFactory();
