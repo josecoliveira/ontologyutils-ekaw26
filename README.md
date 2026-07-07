@@ -6,12 +6,28 @@ This repository contains the source code for the ontology repair prototype used 
 
 - Java 17
 - Maven
+- **GitHub authentication** — The project depends on Maven artifacts hosted on
+  GitHub Packages (`maven.pkg.github.com/rolandbernard/*`). You **must**
+  provide credentials with at least `read:packages` scope so that Maven can
+  resolve these dependencies.
 
-The build expects the Fact++ dependency at `lib/factplusplus-1.7.0.3.jar`. The jar is committed in this checkout, but you can also install it into your local Maven repository:
+  The recommended way is to set the following environment variables **before**
+  starting VS Code or running the dev container:
 
-```bash
-mvn install:install-file -Dfile=lib/factplusplus-1.7.0.3.jar -DgroupId=ontologyutils -DartifactId=factplusplus -Dversion=1.7.0.3 -Dpackaging=jar
-```
+  ```bash
+  export GITHUB_USER=<your-github-username>
+  export GITHUB_TOKEN=<your-github-personal-access-token>
+  ```
+
+  > **Windows users**: Environment variables set inside a terminal session may
+  > not be visible to VS Code when launched from the Start Menu. If the dev
+  > container does not pick up your variables, create a
+  > `.devcontainer/devcontainer.env` file from the provided template:
+  > ```bash
+  > cp .devcontainer/devcontainer.env.example .devcontainer/devcontainer.env
+  > ```
+  > Then edit the file with your credentials. The file is in `.gitignore` so it
+  > will not be committed.
 
 ## Build
 

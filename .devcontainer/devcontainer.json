@@ -6,7 +6,9 @@
     },
     "remoteUser": "vscode",
     "containerEnv": {
-        "SHELL": "/bin/bash"
+        "SHELL": "/bin/bash",
+        "GITHUB_USER": "${localEnv:GITHUB_USER}",
+        "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
     },
     "postCreateCommand": "bash .devcontainer/post-create.sh",
     "customizations": {
@@ -15,7 +17,8 @@
                 "vscjava.vscode-java-pack",
                 "ms-python.python",
                 "ms-python.vscode-pylance",
-                "ms-azuretools.vscode-docker"
+                "ms-azuretools.vscode-docker",
+                "zoocodeorganization.zoo-code"
             ],
             "settings": {
                 "java.configuration.updateBuildConfiguration": "automatic",
