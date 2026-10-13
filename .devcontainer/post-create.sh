@@ -21,7 +21,11 @@ echo "========================================"
 echo " Step 2/2: Setting up Python virtual environment"
 echo "========================================"
 PYTHON_DIR="repair-power-index-replication-ekaw26"
-python3 -m venv "${PYTHON_DIR}/.venv"
+# --clear: the venv lives in the bind-mounted workspace, so it survives a
+# container rebuild. Without clearing, a venv created under a different
+# architecture (e.g. amd64 under emulation) keeps its incompatible wheels and
+# the packages fail to import.
+python3 -m venv --clear "${PYTHON_DIR}/.venv"
 source "${PYTHON_DIR}/.venv/bin/activate"
 pip install --upgrade pip -q
 pip install -r "${PYTHON_DIR}/requirements.txt" -q
