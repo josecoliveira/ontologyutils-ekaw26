@@ -16,6 +16,12 @@ import www.ontologyutils.toolbox.*;
 @Execution(ExecutionMode.CONCURRENT)
 public class SroiqRefinementOperatorTest {
     private static final String ONTOLOGY_IRI = "http://www.semanticweb.org/roland/ontologies/2023/3/untitled/";
+    /**
+     * Ontologies for which Openllet currently returns a wrong (false) entailment
+     * answer. HermiT is used for those (see README "Reasoner Support and
+     * Limitations").
+     */
+    private static final Set<String> HERMIT_ONTOLOGIES = Set.of("/alcri/sroiq-tests.owl");
 
     private Ontology ontology;
     private Covers covers;
@@ -393,7 +399,8 @@ public class SroiqRefinementOperatorTest {
     })
     public void generalizationFromFile(String resourceName) throws OWLOntologyCreationException {
         var path = SroiqAxiomWeakenerTest.class.getResource(resourceName).getFile();
-        try (var ontology = Ontology.loadOntology(path)) {
+        var loaded = Ontology.loadOntology(path);
+        try (var ontology = HERMIT_ONTOLOGIES.contains(resourceName) ? loaded.withHermit() : loaded) {
             var subConcepts = Utils.toSet(ontology.subConcepts());
             var subRoles = Utils.toSet(ontology.subRoles());
             var simpleRoles = Utils.toSet(ontology.simpleRoles());

@@ -28,6 +28,13 @@ public class Ontology implements AutoCloseable {
     private static final OWLOntologyManager defaultManager = OWLManager.createConcurrentOWLOntologyManager();
     private static final OWLReasonerFactory defaultFactory = OpenlletReasonerFactory.getInstance();
     /**
+     * The reasoner used to answer queries the default reasoner cannot handle, for
+     * example property-chain entailment (which Openllet does not support). It is
+     * deliberately a different implementation from the default one so that the two
+     * reasoners cover each other's gaps.
+     */
+    private static final OWLReasonerFactory defaultFallbackFactory = fallbackFor(defaultFactory);
+    /**
      * This is only here for statistics
      */
     public static int reasonerCalls;
@@ -37,11 +44,31 @@ public class Ontology implements AutoCloseable {
      */
     public static boolean originAnnotation = false;
 
+    /**
+     * @param primary
+     *            The reasoner factory used for most queries.
+     * @return A reasoner factory used to answer queries the primary one cannot
+     *         handle. A different implementation is chosen so that the two
+     *         reasoners cover each other's gaps.
+     */
+    private static OWLReasonerFactory fallbackFor(OWLReasonerFactory primary) {
+        if (primary instanceof ReasonerFactory) {
+            return OpenlletReasonerFactory.getInstance();
+        } else {
+            return new ReasonerFactory();
+        }
+    }
+
     private static class ReasonerCache {
         private OWLReasonerFactory reasonerFactory;
+        private OWLReasonerFactory fallbackReasonerFactory;
         private Set<Ontology> references;
         private Deque<OWLReasoner> unusedReasoners;
         private Map<OWLReasoner, Ontology> lastOntologies;
+        private OWLReasoner fallbackReasoner;
+        private OWLOntology fallbackOwlOntology;
+        private Ontology fallbackOntology;
+        private int fallbackModifications;
 
         /**
          * Create a new reasoner cache using the given reasoner factory.
@@ -51,9 +78,11 @@ public class Ontology implements AutoCloseable {
          */
         public ReasonerCache(OWLReasonerFactory reasonerFactory) {
             this.reasonerFactory = reasonerFactory;
+            this.fallbackReasonerFactory = fallbackFor(reasonerFactory);
             this.references = new HashSet<>();
             this.unusedReasoners = new ArrayDeque<>();
             this.lastOntologies = new IdentityHashMap<>();
+            this.fallbackModifications = -1;
         }
 
         /**
@@ -88,6 +117,7 @@ public class Ontology implements AutoCloseable {
                     actuallyDisposeOwlReasoner(reasoner);
                 }
                 unusedReasoners.clear();
+                disposeFallbackReasoner();
             }
         }
 
@@ -100,6 +130,69 @@ public class Ontology implements AutoCloseable {
          */
         public synchronized void disposeOwlReasoner(OWLReasoner reasoner) {
             unusedReasoners.add(reasoner);
+        }
+
+        private void disposeFallbackReasoner() {
+            if (fallbackReasoner != null) {
+                fallbackReasoner.dispose();
+                fallbackReasoner = null;
+            }
+            if (fallbackOwlOntology != null) {
+                fallbackOwlOntology.getOWLOntologyManager().removeOntology(fallbackOwlOntology);
+                fallbackOwlOntology = null;
+            }
+            fallbackOntology = null;
+            fallbackModifications = -1;
+        }
+
+        private OWLReasoner getFallbackReasoner(Ontology ontology) {
+            if (fallbackReasoner == null || fallbackOntology != ontology
+                    || fallbackModifications != ontology.modifications) {
+                disposeFallbackReasoner();
+                try {
+                    var ontologyManager = OWLManager.createOWLOntologyManager();
+                    fallbackOwlOntology = ontologyManager.createOntology();
+                    fallbackOwlOntology.addAxioms(ontology.axioms());
+                    fallbackReasoner = fallbackReasonerFactory.createReasoner(fallbackOwlOntology);
+                    fallbackOntology = ontology;
+                    fallbackModifications = ontology.modifications;
+                    reasonerCalls += 1;
+                } catch (OWLOntologyCreationException e) {
+                    throw Utils.panic(e);
+                }
+            }
+            return fallbackReasoner;
+        }
+
+        /**
+         * Answer a query using the fallback reasoner. Used when the primary
+         * reasoner cannot answer it (unsupported query) or fails internally.
+         *
+         * @param <T>
+         *            The return value of the action to be performed.
+         * @param ontology
+         *            The ontology for which to answer the query.
+         * @param action
+         *            The action to perform with the reasoner.
+         * @param cause
+         *            The failure of the primary reasoner.
+         * @return The value returned by {@code action}.
+         */
+        private synchronized <T> T withFallbackReasonerDo(Ontology ontology, Function<OWLReasoner, T> action,
+                RuntimeException cause) {
+            if (fallbackReasonerFactory == null) {
+                throw cause;
+            }
+            var reasoner = getFallbackReasoner(ontology);
+            try {
+                return action.apply(reasoner);
+            } catch (RuntimeException ex) {
+                // The fallback could not answer either; report that failure and the
+                // original one.
+                ex.addSuppressed(cause);
+                disposeFallbackReasoner();
+                throw ex;
+            }
         }
 
         /**
@@ -175,15 +268,26 @@ public class Ontology implements AutoCloseable {
             if (Thread.interrupted()) {
                 throw new CanceledException();
             }
-            var reasoner = getOwlReasoner(ontology);
+            OWLReasoner reasoner;
+            try {
+                reasoner = getOwlReasoner(ontology);
+            } catch (UnsupportedOperationException | NullPointerException | IndexOutOfBoundsException
+                    | ReasonerInternalException ex) {
+                // The reasoner could not even be created for this ontology. This happens for
+                // example with HermiT on ontologies containing `owl:Thing ⊑ owl:Nothing`,
+                // which HermiT fails to normalize. Answer the query with the fallback
+                // reasoner instead of failing.
+                return withFallbackReasonerDo(ontology, action, ex);
+            }
             try {
                 return action.apply(reasoner);
-            } catch (ReasonerInternalException ex) {
-                // Nothing we can really do here, try again with a new reasoner.
-                ex.printStackTrace();
+            } catch (UnsupportedOperationException | IndexOutOfBoundsException | ReasonerInternalException ex) {
+                // The reasoner could not answer this query (unsupported feature, or an
+                // internal failure). Reusing it is not safe, so drop it and answer the
+                // query with the fallback reasoner before giving up.
                 actuallyDisposeOwlReasoner(reasoner);
                 reasoner = null;
-                return withReasonerDo(ontology, action);
+                return withFallbackReasonerDo(ontology, action, ex);
             } catch (Exception | OutOfMemoryError ex) {
                 // Reusing the reasoner after an exception is not a good idea.
                 actuallyDisposeOwlReasoner(reasoner);
@@ -201,6 +305,11 @@ public class Ontology implements AutoCloseable {
     private Set<OWLAxiom> refutableAxioms;
     private ReasonerCache reasonerCache;
     private boolean changed;
+    /**
+     * Counts modifications of the axiom sets. Used to detect whether a cached
+     * reasoner (in particular the fallback reasoner) is still up to date.
+     */
+    private int modifications;
 
     /**
      * Create a new ontology around the given static and refutable axioms. Should
@@ -536,6 +645,7 @@ public class Ontology implements AutoCloseable {
      */
     public void removeAxioms(Stream<? extends OWLAxiom> axioms) {
         changed = true;
+        modifications++;
         axioms.forEach(axiom -> {
             staticAxioms.remove(axiom);
             refutableAxioms.remove(axiom);
@@ -548,6 +658,7 @@ public class Ontology implements AutoCloseable {
      */
     public void addStaticAxioms(Stream<? extends OWLAxiom> axioms) {
         changed = true;
+        modifications++;
         axioms.forEach(axiom -> {
             refutableAxioms.remove(axiom);
             staticAxioms.add(axiom);
@@ -560,6 +671,7 @@ public class Ontology implements AutoCloseable {
      */
     public void addAxioms(Stream<? extends OWLAxiom> axioms) {
         changed = true;
+        modifications++;
         axioms.forEach(axiom -> {
             staticAxioms.remove(axiom);
             refutableAxioms.add(axiom);
@@ -691,6 +803,7 @@ public class Ontology implements AutoCloseable {
      */
     public void setRefutableAxioms(Collection<? extends OWLAxiom> axioms) {
         changed = true;
+        modifications++;
         refutableAxioms.clear();
         refutableAxioms.addAll(axioms);
     }
@@ -788,7 +901,12 @@ public class Ontology implements AutoCloseable {
      * @return true if all of the axioms are entailed, false otherwise.
      */
     public boolean isEntailed(Stream<? extends OWLAxiom> axioms) {
-        return withReasonerDo(reasoner -> reasoner.isEntailed(axioms));
+        // OWLAPI's default isEntailed(Stream) materialises the stream into an
+        // (unordered) set for the query anyway; doing it here keeps the same memory
+        // profile while allowing the query to be replayed when it has to be retried
+        // with the fallback reasoner.
+        var axiomSet = Utils.toSet(axioms);
+        return withReasonerDo(reasoner -> reasoner.isEntailed(axiomSet));
     }
 
     /**
@@ -1248,6 +1366,7 @@ public class Ontology implements AutoCloseable {
      */
     public void generateDeclarationAxioms() {
         changed = true;
+        modifications++;
         var df = getDefaultDataFactory();
         for (var entity : Utils.toList(signature())) {
             if (entity.isOWLClass() || entity.isOWLObjectProperty() || entity.isOWLNamedIndividual()) {

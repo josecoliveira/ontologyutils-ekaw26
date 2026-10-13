@@ -93,6 +93,13 @@
             <artifactId>org.semanticweb.hermit</artifactId>
             <version>1.4.5.519</version>
         </dependency>
+        <!-- Openllet uses javax.xml.bind.DatatypeConverter for datatype lexical forms;
+             JAXB was removed from the JDK in Java 11, so it must be provided explicitly. -->
+        <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+            <version>2.3.1</version>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-nop</artifactId>

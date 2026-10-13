@@ -139,19 +139,24 @@ public class SroiqAxiomStrengthenerTest {
 
     @Test
     public void allStrongAxiomsEntailWeakerAxioms() {
-        ontology.logicalAxioms().forEach(weakAxiom -> {
-            try (var copy = ontology.cloneWithSeparateCache()) {
-                copy.removeAxioms(weakAxiom);
-                var axiomStrengthener = new AxiomStrengthener(copy);
-                axiomStrengthener.strongerAxioms(weakAxiom).forEach(strongAxiom -> {
-                    try (var copy2 = copy.clone()) {
-                        copy2.addAxioms(strongAxiom);
-                        // Some reasoners don't like entailment on inconsistent ontologies.
-                        assertTrue(!copy2.isConsistent() || copy2.isEntailed(weakAxiom));
-                    }
-                });
-            }
-        });
+        // HermiT is used for this entailment check: Openllet currently returns wrong
+        // (false) answers for entailments between `ObjectHasSelf` expressions on
+        // sub-properties (see README "Reasoner Support and Limitations").
+        try (var ontology = this.ontology.withHermit()) {
+            ontology.logicalAxioms().forEach(weakAxiom -> {
+                try (var copy = ontology.cloneWithSeparateCache()) {
+                    copy.removeAxioms(weakAxiom);
+                    var axiomStrengthener = new AxiomStrengthener(copy);
+                    axiomStrengthener.strongerAxioms(weakAxiom).forEach(strongAxiom -> {
+                        try (var copy2 = copy.clone()) {
+                            copy2.addAxioms(strongAxiom);
+                            // Some reasoners don't like entailment on inconsistent ontologies.
+                            assertTrue(!copy2.isConsistent() || copy2.isEntailed(weakAxiom));
+                        }
+                    });
+                }
+            });
+        }
     }
 
     @ParameterizedTest
@@ -165,7 +170,9 @@ public class SroiqAxiomStrengthenerTest {
     public void allStrongAxiomsEntailWeakerAxiomsFromFile(String resourceName)
             throws OWLOntologyCreationException {
         var path = SroiqAxiomWeakenerTest.class.getResource(resourceName).getFile();
-        try (var ontology = Ontology.loadOntology(path)) {
+        // HermiT is used for this entailment check (see README "Reasoner Support and
+        // Limitations").
+        try (var ontology = Ontology.loadOntology(path).withHermit()) {
             ontology.logicalAxioms().forEach(weakAxiom -> {
                 try (var copy = ontology.cloneWithSeparateCache()) {
                     copy.removeAxioms(weakAxiom);
