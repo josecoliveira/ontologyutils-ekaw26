@@ -18,3 +18,8 @@ analysis*/
 output/
 .idea/
 devcontainer.env
+alc_bioportal_ontologies/
+bioportal_ontologies/
+plans/
+factplusplus/
+repair-power-index-replication-ekaw26/

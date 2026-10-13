@@ -4,89 +4,15 @@ This repository contains the source code for the ontology repair prototype used 
 
 ## Requirements
 
-### Architecture Requirements
-
-> **Note:** the custom `factplusplus` dependency has been **removed**. The
-> prototype now uses a standard, pure-Java OWL reasoner by default, and the
-> `--reasoner` option selects between `hermit`, `jfact` and `openllet`. For what
-> each reasoner can and cannot do see
-> [Reasoner Support and Limitations](#reasoner-support-and-limitations).
->The dev container is still built for `linux/amd64`, so the Rosetta/QEMU notes
-> below continue to apply to that emulation; the parts that describe the
-> `factplusplus` native library are kept for reference.
-
-| Host Platform | Dev Container Support | Required Setup |
-|---|---|---|
-| **Linux x86_64 / amd64** | ✅ Native | No special setup |
-| **macOS Apple Silicon (M1–M4)** | ✅ Via Rosetta 2 emulation | Docker Desktop ≥ 4.19 with Rosetta enabled |
-| **Linux ARM64 (e.g., Raspberry Pi)** | ⚠️ Via QEMU binfmt | Install `qemu-user-static` + `binfmt-support` |
-
-#### Enabling Rosetta 2 on Apple Silicon
-
-1. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) (version 4.19 or later).
-2. Open Docker Desktop → **Settings** (gear icon) → **General**.
-3. Check **"Use Rosetta for x86/amd64 emulation on Apple Silicon"**.
-4. Apply & restart Docker Desktop.
-
-> **Verify Rosetta is working:**
-> ```bash
-> docker run --rm --platform linux/amd64 alpine uname -m
-> # Expected output: x86_64
-> ```
-
-#### Setting up the cross-architecture buildx driver
-
-The [`Dockerfile`](.devcontainer/Dockerfile) uses `FROM --platform=linux/amd64` to build an amd64 container image. On Apple Silicon (ARM64), this requires a **`docker-container`** buildx driver that supports cross-platform image loading.
-
-On **Apple Silicon** and **Linux ARM64**, set up the driver once:
-
-```bash
-docker buildx create --name crossarch --driver docker-container --use --bootstrap
-```
-
-This creates a BuildKit container that can build amd64 images via QEMU emulation and load them into the local Docker image store.
-
-> **Note:** On native `linux/amd64` hosts, the default `docker` buildx driver works fine — no special setup needed.
-
-#### Verifying Cross-Architecture Setup
-
-The dev container's [`post-create.sh`](.devcontainer/post-create.sh) script includes a native library verification step that runs during container creation. You can also manually check:
-
-```bash
-# Check container platform
-uname -m
-# Should show: x86_64 (even on Apple Silicon, because of Rosetta emulation)
-
-# Check JVM can load native libraries
-java -XX:+PrintNativeLibrary -version 2>&1 | head -5
-```
-
-### GitHub Authentication
-
 - Java 17
 - Maven
-- **GitHub authentication** — The project depends on Maven artifacts hosted on
-  GitHub Packages (`maven.pkg.github.com/rolandbernard/*`). You **must**
-  provide credentials with at least `read:packages` scope so that Maven can
-  resolve these dependencies.
+- Python 3.10+
+- `pip`
 
-  The recommended way is to set the following environment variables **before**
-  starting VS Code or running the dev container:
-
-  ```bash
-  export GITHUB_USER=<your-github-username>
-  export GITHUB_TOKEN=<your-github-personal-access-token>
-  ```
-
-  > **Windows users**: Environment variables set inside a terminal session may
-  > not be visible to VS Code when launched from the Start Menu. If the dev
-  > container does not pick up your variables, create a
-  > `.devcontainer/devcontainer.env` file from the provided template:
-  > ```bash
-  > cp .devcontainer/devcontainer.env.example .devcontainer/devcontainer.env
-  > ```
-  > Then edit the file with your credentials. The file is in `.gitignore` so it
-  > will not be committed.
+The dev container installs all of these; the only host-specific requirement is
+that your Docker environment can build the base image
+(`maven:3.9-eclipse-temurin-17`) natively. No cross-architecture setup, native
+library or registry credentials are needed.
 
 ## Reasoner Support and Limitations
 
@@ -193,71 +119,6 @@ java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWith
 ```
 
 The inconsistent ontologies used in the paper are in `src/test/resources/ekaw26/inconsistent/`.
-
-## Troubleshooting
-
-### `UnsatisfiedLinkError`: Native library `libFaCTPlusPlus.so` cannot be loaded
-
-This error occurs when the `factplusplus` native library cannot be loaded by the JVM. The JAR bundles native code compiled for **`linux/amd64`** only.
-
-**On Apple Silicon (M1/M2/M3/M4):**
-1. Ensure Docker Desktop ≥ 4.19 is installed and **Rosetta 2** is enabled.
-2. Verify that the dev container is running under `--platform=linux/amd64` (check [`devcontainer.json`](.devcontainer/devcontainer.json)).
-3. Run `uname -m` inside the container — it should print `x86_64`. If it prints `aarch64`, the platform override is not being applied.
-4. Confirm Rosetta is working at the Docker level:
-   ```bash
-   docker run --rm --platform linux/amd64 alpine uname -m
-   # Expected: x86_64
-   ```
-
-**On Linux ARM64 (e.g., Raspberry Pi):**
-1. Install QEMU binfmt support:
-   ```bash
-   docker run --privileged --rm tonistiigi/binfmt --install all
-   ```
-2. Rebuild the dev container.
-
-### Maven dependency resolution failures
-
-```
-Could not resolve dependency: ... factplusplus:jar:1.7.0.3 was not found
-```
-
-The `factplusplus` dependency is hosted on **GitHub Packages** and requires authentication. Ensure:
-
-1. You have a [GitHub Personal Access Token (classic)](https://github.com/settings/tokens) with at least `read:packages` scope.
-2. The environment variables `GITHUB_USER` and `GITHUB_TOKEN` are set **before** launching VS Code:
-   ```bash
-   export GITHUB_USER=<your-username>
-   export GITHUB_TOKEN=<your-token>
-   code .
-   ```
-3. Alternatively, create a `.devcontainer/devcontainer.env` file:
-   ```bash
-   cp .devcontainer/devcontainer.env.example .devcontainer/devcontainer.env
-   # Edit with your credentials
-   ```
-
-### Dev container fails to start on Apple Silicon
-
-If the container exits immediately with an error like `exec format error` or `platform mismatch`:
-
-1. Check that **Rosetta 2** is enabled in Docker Desktop settings.
-2. Verify a **`docker-container`** buildx driver is active and set as default:
-   ```bash
-   docker buildx ls
-   # The active driver (marked with *) should be 'docker-container', not 'docker'
-   ```
-   If not, create and switch to it:
-   ```bash
-   docker buildx create --name crossarch --driver docker-container --use --bootstrap
-   ```
-3. Verify that Docker Desktop is using the **Rosetta** backend (not VZ or QEMU fallback) for amd64 emulation.
-4. Run the architecture detection script manually:
-   ```bash
-   bash .devcontainer/check-arch.sh
-   ```
-5. As a last resort, reset Docker Desktop to factory defaults and re-enable Rosetta.
 
 ## Original Project
 

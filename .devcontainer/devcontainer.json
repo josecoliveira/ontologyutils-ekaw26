@@ -6,9 +6,7 @@
     },
     "remoteUser": "vscode",
     "containerEnv": {
-        "SHELL": "/bin/bash",
-        "GITHUB_USER": "${localEnv:GITHUB_USER}",
-        "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
+        "SHELL": "/bin/bash"
     },
     "postCreateCommand": "bash .devcontainer/post-create.sh",
     "customizations": {
