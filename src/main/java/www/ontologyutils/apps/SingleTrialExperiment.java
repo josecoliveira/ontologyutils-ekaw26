@@ -8,7 +8,7 @@ import java.util.function.Supplier;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
+import openllet.owlapi.OpenlletReasonerFactory;
 import www.ontologyutils.normalization.SroiqNormalization;
 import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
@@ -38,7 +38,7 @@ import www.ontologyutils.toolbox.*;
  *   --make-inconsistent-timeout-secs <int>
  */
 public class SingleTrialExperiment {
-    private final OWLReasonerFactory reasonerFactory = new FaCTPlusPlusReasonerFactory();
+    private final OWLReasonerFactory reasonerFactory = OpenlletReasonerFactory.getInstance();
     private boolean verbose = false;
 
     private static final List<String> A_REPAIRS = List.of("A1", "A2", "A3");

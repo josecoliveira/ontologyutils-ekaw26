@@ -59,12 +59,6 @@ public class CheckConsistency extends App {
             } catch (Exception e) {
                 System.err.println("ERROR... " + e);
             }
-            System.err.println("** Consistency check: FaCT++");
-            try (var withFactPP = ontology.cloneWithFactPP()) {
-                printResult(withFactPP.isConsistent());
-            } catch (Exception e) {
-                System.err.println("ERROR... " + e);
-            }
         }
     }
 

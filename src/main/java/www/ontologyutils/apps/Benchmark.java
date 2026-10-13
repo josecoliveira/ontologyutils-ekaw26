@@ -83,13 +83,6 @@ public class Benchmark extends App {
             System.err.println("Normalizing to SROIQ...");
             normalization.apply(ontology);
         }
-        System.err.println("** Benchmark: FaCT++");
-        try (var withFactPP = ontology.cloneWithFactPP()) {
-            benchOntology(withFactPP);
-        } catch (Exception e) {
-            System.err.println("ERROR... " + e);
-            e.printStackTrace();
-        }
         System.err.println("** Benchmark: OPENLLET");
         try (var withOpenllet = ontology.cloneWithOpenllet()) {
             benchOntology(withOpenllet);

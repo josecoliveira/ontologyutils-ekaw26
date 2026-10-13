@@ -10,13 +10,6 @@
 
     <name>ontologyutils</name>
 
-    <repositories>
-        <repository>
-            <id>github</id>
-            <url>https://maven.pkg.github.com/rolandbernard/*</url>
-        </repository>
-    </repositories>
-
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -99,11 +92,6 @@
             <groupId>net.sourceforge.owlapi</groupId>
             <artifactId>org.semanticweb.hermit</artifactId>
             <version>1.4.5.519</version>
-        </dependency>
-        <dependency>
-            <groupId>ontologyutils</groupId>
-            <artifactId>factplusplus</artifactId>
-            <version>1.7.0.3</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

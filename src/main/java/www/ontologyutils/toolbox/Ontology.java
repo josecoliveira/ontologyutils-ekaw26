@@ -13,7 +13,6 @@ import org.semanticweb.owlapi.reasoner.*;
 import org.semanticweb.owlapi.util.*;
 
 import openllet.owlapi.OpenlletReasonerFactory;
-import uk.ac.manchester.cs.factplusplus.owlapi.FaCTPlusPlusReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 
 /**
@@ -27,7 +26,7 @@ import uk.ac.manchester.cs.jfact.JFactFactory;
  */
 public class Ontology implements AutoCloseable {
     private static final OWLOntologyManager defaultManager = OWLManager.createConcurrentOWLOntologyManager();
-    private static final OWLReasonerFactory defaultFactory = new FaCTPlusPlusReasonerFactory();
+    private static final OWLReasonerFactory defaultFactory = OpenlletReasonerFactory.getInstance();
     /**
      * This is only here for statistics
      */
@@ -43,7 +42,6 @@ public class Ontology implements AutoCloseable {
         private Set<Ontology> references;
         private Deque<OWLReasoner> unusedReasoners;
         private Map<OWLReasoner, Ontology> lastOntologies;
-        private boolean hardRefresh = false;
 
         /**
          * Create a new reasoner cache using the given reasoner factory.
@@ -111,7 +109,14 @@ public class Ontology implements AutoCloseable {
          */
         public OWLReasoner getNewOwlReasoner(Ontology ontology) {
             try {
-                var owlOntology = defaultManager.createOntology();
+                // Some reasoners (e.g. HermiT) register their ontology change listener on the
+                // manager of the reasoner's root ontology without restricting it to that
+                // ontology. Sharing one manager between all reasoners would then leak changes
+                // from unrelated ontologies into the reasoner, which causes
+                // ConcurrentModificationExceptions and wrong results when tests run in
+                // parallel. Giving every reasoner its own manager prevents this.
+                var ontologyManager = OWLManager.createOWLOntologyManager();
+                var owlOntology = ontologyManager.createOntology();
                 owlOntology.addAxioms(ontology.axioms());
                 return reasonerFactory.createReasoner(owlOntology);
             } catch (OWLOntologyCreationException e) {
@@ -139,21 +144,12 @@ public class Ontology implements AutoCloseable {
             } else {
                 var owlOntology = reasoner.getRootOntology();
                 if ((lastOntology != ontology || ontology.changed) && ontology.applyChangesTo(owlOntology)) {
-                    if (hardRefresh) {
-                        // Some reasoners are not performing the flushing correctly. This is an ugly
-                        // workaround. The performance impact of this depends on the reasoner.
-                        reasoner.dispose();
-                        reasoner = reasonerFactory.createReasoner(owlOntology);
-                    } else {
-                        try {
-                            reasoner.flush();
-                        } catch (IllegalArgumentException e) {
-                            // HermitT likes to throw this and complain that it can not do incremental
-                            // updates.
-                            reasoner.dispose();
-                            reasoner = reasonerFactory.createReasoner(owlOntology);
-                        }
-                    }
+                    // Rebuild the reasoner instead of relying on incremental flushing. Several
+                    // reasoners keep stale caches (e.g. the class taxonomy used by
+                    // getBottomClassNode) after flushing changes, which leads to wrong answers.
+                    // Rebuilding the reasoner forces a full reclassification.
+                    reasoner.dispose();
+                    reasoner = reasonerFactory.createReasoner(owlOntology);
                 }
             }
             synchronized (this) {
@@ -1308,16 +1304,6 @@ public class Ontology implements AutoCloseable {
     }
 
     /**
-     * Clone this ontology, but give it a cache using the FaCT++ reasoner.
-     *
-     * @return The new ontology.
-     */
-    public Ontology cloneWithFactPP() {
-        var newReasonerCache = new ReasonerCache(new FaCTPlusPlusReasonerFactory());
-        return new Ontology(staticAxioms, refutableAxioms, newReasonerCache);
-    }
-
-    /**
      * Clone this ontology, but only axioms in {@code axioms}.
      *
      * @param axioms
@@ -1401,17 +1387,6 @@ public class Ontology implements AutoCloseable {
     public Ontology withJFact() {
         try (var current = this) {
             return this.cloneWithJFact();
-        }
-    }
-
-    /**
-     * Close this ontology, and return a new one using the FaCT++ reasoner.
-     *
-     * @return The new ontology.
-     */
-    public Ontology withFactPP() {
-        try (var current = this) {
-            return this.cloneWithFactPP();
         }
     }
 
