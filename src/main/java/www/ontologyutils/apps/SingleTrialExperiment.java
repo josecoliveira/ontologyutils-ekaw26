@@ -5,10 +5,12 @@ import java.util.concurrent.*;
 import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
+import org.semanticweb.HermiT.ReasonerFactory;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 import openllet.owlapi.OpenlletReasonerFactory;
+import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.normalization.SroiqNormalization;
 import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
@@ -31,6 +33,7 @@ import www.ontologyutils.toolbox.*;
  *   --ontology <path>  (required)
  *   --seed <long>      (required)
  *   --run-id <string>  (optional)
+ *   --reasoner <name>  (optional) openllet (default), hermit or jfact
  *   --verbose          (optional) enable infoMessage logging from repairs
  *   --removal-timeout-secs <int>
  *   --weakening-timeout-secs <int>
@@ -38,7 +41,7 @@ import www.ontologyutils.toolbox.*;
  *   --make-inconsistent-timeout-secs <int>
  */
 public class SingleTrialExperiment {
-    private final OWLReasonerFactory reasonerFactory = OpenlletReasonerFactory.getInstance();
+    private OWLReasonerFactory reasonerFactory = OpenlletReasonerFactory.getInstance();
     private boolean verbose = false;
 
     private static final List<String> A_REPAIRS = List.of("A1", "A2", "A3");
@@ -481,10 +484,21 @@ public class SingleTrialExperiment {
         String ontologyPath = map.get("ontology");
         String seedStr = map.get("seed");
         String runId = map.getOrDefault("run-id", "");
+        var reasonerName = map.getOrDefault("reasoner", "openllet");
 
         if (ontologyPath == null || seedStr == null) {
-            System.err.println("Usage: SingleTrialExperiment --ontology <path> --seed <long> [--run-id <string>] [--verbose] [--removal-timeout-secs N] [--weakening-timeout-secs N] [--power-index-timeout-secs N] [--make-inconsistent-timeout-secs N]");
+            System.err.println("Usage: SingleTrialExperiment --ontology <path> --seed <long> [--run-id <string>] [--reasoner openllet|hermit|jfact] [--verbose] [--removal-timeout-secs N] [--weakening-timeout-secs N] [--power-index-timeout-secs N] [--make-inconsistent-timeout-secs N]");
             System.exit(2);
+        }
+
+        switch (reasonerName) {
+            case "openllet" -> app.reasonerFactory = OpenlletReasonerFactory.getInstance();
+            case "hermit" -> app.reasonerFactory = new ReasonerFactory();
+            case "jfact" -> app.reasonerFactory = new JFactFactory();
+            default -> {
+                System.err.println("Unknown reasoner: " + reasonerName + " (expected openllet, hermit or jfact)");
+                System.exit(2);
+            }
         }
 
         long seed;
