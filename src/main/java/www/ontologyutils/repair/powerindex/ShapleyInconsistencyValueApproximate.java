@@ -17,7 +17,13 @@ import www.ontologyutils.toolbox.LruCache;
 public class ShapleyInconsistencyValueApproximate implements PowerIndex {
     private static final int DEFAULT_APPROXIMATION_SAMPLES = 735;
     private static final long DEFAULT_APPROXIMATION_SEED = 13L;
-    private static final int PARALLEL_SAMPLING_THREADS = 8;
+    /**
+     * Number of worker threads used for parallel sampling. Overridable per JVM with
+     * {@code -Dontologyutils.samplingThreads=<n>} so that an orchestrator running several
+     * trials concurrently can keep the total thread count within the CPU budget.
+     */
+    private static final int PARALLEL_SAMPLING_THREADS =
+            Math.max(1, Integer.getInteger("ontologyutils.samplingThreads", 16));
     private static final ExecutorService SAMPLING_EXECUTOR = Executors.newFixedThreadPool(PARALLEL_SAMPLING_THREADS,
             runnable -> {
                 Thread thread = new Thread(runnable);
