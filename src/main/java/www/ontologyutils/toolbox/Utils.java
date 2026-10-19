@@ -58,7 +58,40 @@ public final class Utils {
     }
 
     /**
+     * Order the given elements so that anything derived from them does not depend
+     * on the iteration order of the collection they were taken from.
+     *
+     * <p>
+     * Hash-based collections of OWL objects iterate in an order that differs
+     * between JVM runs, because entries with equal hash codes are tie-broken using
+     * {@link System#identityHashCode}. Making the order explicit here is what
+     * keeps a seeded run reproducible.
+     *
+     * @param <T>
+     *            The element type.
+     * @param elements
+     *            The elements to order; the list is sorted in place.
+     * @return The same list, in a deterministic order.
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private static <T> List<T> deterministicOrder(List<T> elements) {
+        if (elements.size() > 1) {
+            if (elements.get(0) instanceof Comparable) {
+                elements.sort((a, b) -> ((Comparable) a).compareTo(b));
+            } else {
+                elements.sort(Comparator.comparing(String::valueOf));
+            }
+        }
+        return elements;
+    }
+
+    /**
      * Select a random from a finite stream uniformly at random.
+     *
+     * <p>
+     * The elements are ordered deterministically before the index is drawn, so the
+     * same seed selects the same element in every run even when the stream
+     * originates from a hash-based collection.
      *
      * @param <T>
      *            The element type of the stream.
@@ -67,7 +100,7 @@ public final class Utils {
      * @return A random element in {@code stream}.
      */
     public static <T> T randomChoice(Stream<? extends T> stream) {
-        var flatList = Utils.toList(stream);
+        var flatList = deterministicOrder(Utils.toList(stream));
         int randomIdx = random.get().nextInt(flatList.size());
         return flatList.get(randomIdx);
     }
@@ -88,6 +121,10 @@ public final class Utils {
     /**
      * Return a random order from the finite stream.
      *
+     * <p>
+     * The elements are ordered deterministically before shuffling, so the same seed
+     * produces the same permutation in every run.
+     *
      * @param <T>
      *            The element type of the stream.
      * @param stream
@@ -95,7 +132,7 @@ public final class Utils {
      * @return A random order of {@code stream}.
      */
     public static <T> List<T> randomOrder(Stream<? extends T> stream) {
-        var flatList = Utils.toList(stream.map(t -> (T) t));
+        var flatList = deterministicOrder(Utils.toList(stream.map(t -> (T) t)));
         Collections.shuffle(flatList, random.get());
         return flatList;
     }
