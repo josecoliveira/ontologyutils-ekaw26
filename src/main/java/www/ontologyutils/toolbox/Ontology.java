@@ -7,6 +7,7 @@ import java.util.stream.*;
 
 import org.semanticweb.HermiT.ReasonerFactory;
 import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.io.FileDocumentSource;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.profiles.*;
 import org.semanticweb.owlapi.reasoner.*;
@@ -422,6 +423,33 @@ public class Ontology implements AutoCloseable {
     }
 
     /**
+     * Loader configuration used for every ontology loaded by this class.
+     *
+     * <p>
+     * By default OWLAPI follows {@code owl:imports}, which requires network access
+     * to the imported IRIs and fails outright when they are unreachable. Setting
+     * the system property {@code -Dontologyutils.ignoreImports=true} makes loading
+     * tolerant instead: an import that cannot be resolved is skipped after a short
+     * connection timeout, so the ontology is loaded from its own document only.
+     *
+     * <p>
+     * This mirrors what {@code CleanupOntology} does implicitly (it rebuilds the
+     * ontology without imports) and is what allows raw BioPortal downloads to be
+     * processed without a cleanup step.
+     *
+     * @return The configuration to load ontologies with.
+     */
+    private static OWLOntologyLoaderConfiguration importPolicy() {
+        if (Boolean.getBoolean("ontologyutils.ignoreImports")) {
+            return new OWLOntologyLoaderConfiguration()
+                    .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT)
+                    .setConnectionTimeout(2)
+                    .setRetriesToAttempt(0);
+        }
+        return new OWLOntologyLoaderConfiguration();
+    }
+
+    /**
      * @param filePath
      *            File containing the ontology.
      * @param reasonerFactory
@@ -432,7 +460,8 @@ public class Ontology implements AutoCloseable {
         OWLOntology ontology = null;
         try {
             var ontologyFile = new File(filePath);
-            ontology = defaultManager.loadOntologyFromOntologyDocument(ontologyFile);
+            ontology = defaultManager.loadOntologyFromOntologyDocument(
+                    new FileDocumentSource(ontologyFile), importPolicy());
             return withAxiomsFrom(ontology, reasonerFactory);
         } catch (OWLOntologyCreationException e) {
             throw Utils.panic(e);

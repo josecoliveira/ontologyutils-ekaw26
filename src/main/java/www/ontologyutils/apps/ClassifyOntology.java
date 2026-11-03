@@ -26,27 +26,38 @@ public class ClassifyOntology extends App {
 
     @Override
     public void run() {
-        var ontology = Ontology.loadOntology(inputFile).withHermit();
+        // No reasoner is selected: everything printed below is computed from the
+        // axioms alone, and instantiating HermiT here would make the run fail for
+        // ontologies it refuses to normalise (SWRL rules with built-in atoms,
+        // non-simple properties in cardinality restrictions).
+        var ontology = Ontology.loadOntology(inputFile);
         System.out.println("Axioms: " + ontology.logicalAxioms().count() + "; Concept names: "
                 + ontology.conceptsInSignature().count() + "; Role names: " + ontology.rolesInSignature().count()
                 + "; Subconcepts: " + ontology.subConcepts().count());
-        System.out.print("OWL 2 profiles: ");
-        var reports = ontology.checkOwlProfiles();
-        for (var report : reports) {
-            if (!report.isInProfile() && report.getProfile().getName().endsWith("DL")) {
-                System.out.print(report);
-            }
-        }
-        for (var report : reports) {
-            if (report.isInProfile()) {
-                System.out.print(report.getProfile().getName() + "; ");
-            }
-        }
-        System.out.println();
+        // The DL expressivity is printed before the profile check because that is
+        // what the ontology filter uses. The profile reports are informational only,
+        // so a failure there must not discard the classification.
         System.out.print("DL languages: ");
         ontology.checkDlExpressivity().forEach(language -> {
             System.out.print(language.name() + "; ");
         });
+        System.out.println();
+        System.out.print("OWL 2 profiles: ");
+        try {
+            var reports = ontology.checkOwlProfiles();
+            for (var report : reports) {
+                if (!report.isInProfile() && report.getProfile().getName().endsWith("DL")) {
+                    System.out.print(report);
+                }
+            }
+            for (var report : reports) {
+                if (report.isInProfile()) {
+                    System.out.print(report.getProfile().getName() + "; ");
+                }
+            }
+        } catch (RuntimeException e) {
+            System.out.print("check failed: " + e);
+        }
         System.out.println();
         ontology.close();
     }
