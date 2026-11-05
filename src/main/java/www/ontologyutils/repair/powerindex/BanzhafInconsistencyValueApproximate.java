@@ -153,6 +153,9 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
             if (!ascending) {
                 comparator = comparator.reversed();
             }
+            // The comparator already points at the end of the ranking that decides the
+            // selection: the largest scores when scoring bad axioms, the smallest when
+            // scoring weakenings.
             List<OWLAxiom> ranking = averaged.entrySet().stream()
                     .sorted(comparator)
                     .limit(5)
@@ -215,13 +218,20 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
                 Map<OWLAxiom, Double> localTotals = new HashMap<>();
                 List<OWLAxiom> orderedTargets = targets.stream().sorted().collect(Collectors.toList());
                 for (int i = 0; i < samplesForWorker; i++) {
-                    Set<OWLAxiom> coalitionBase = randomCoalitionExcludingTargets(orderedUniverse, targets, random);
-                    int baseValue = drasticInconsistencyValue(coalitionBase);
+                    // The Banzhaf index averages the marginal contribution over all
+                    // coalitions of the other axioms, so the other targets have to be able to
+                    // enter the coalition. Excluding every target made the coalition empty
+                    // whenever the targets were the whole universe, and every marginal
+                    // contribution was then v({phi}) - v({}) = 0.
+                    Set<OWLAxiom> coalition = randomCoalition(orderedUniverse, random);
 
                     for (OWLAxiom target : orderedTargets) {
+                        Set<OWLAxiom> coalitionBase = new HashSet<>(coalition);
+                        coalitionBase.remove(target);
                         Set<OWLAxiom> coalitionWithTarget = new HashSet<>(coalitionBase);
                         coalitionWithTarget.add(target);
-                        double marginal = drasticInconsistencyValue(coalitionWithTarget) - baseValue;
+                        double marginal = drasticInconsistencyValue(coalitionWithTarget)
+                                - drasticInconsistencyValue(coalitionBase);
                         localTotals.merge(target, marginal, Double::sum);
                     }
                 }
@@ -253,22 +263,22 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
         return invokeAll(tasks).stream().mapToDouble(Double::doubleValue).sum();
     }
 
-    private static Set<OWLAxiom> randomCoalitionExcludingTarget(List<OWLAxiom> orderedUniverse, OWLAxiom target,
-            Random random) {
+
+    private static Set<OWLAxiom> randomCoalition(List<OWLAxiom> orderedUniverse, Random random) {
         Set<OWLAxiom> coalition = new HashSet<>();
         for (OWLAxiom candidate : orderedUniverse) {
-            if (!candidate.equals(target) && random.nextBoolean()) {
+            if (random.nextBoolean()) {
                 coalition.add(candidate);
             }
         }
         return coalition;
     }
 
-    private static Set<OWLAxiom> randomCoalitionExcludingTargets(List<OWLAxiom> orderedUniverse, Set<OWLAxiom> targets,
+    private static Set<OWLAxiom> randomCoalitionExcludingTarget(List<OWLAxiom> orderedUniverse, OWLAxiom target,
             Random random) {
         Set<OWLAxiom> coalition = new HashSet<>();
         for (OWLAxiom candidate : orderedUniverse) {
-            if (!targets.contains(candidate) && random.nextBoolean()) {
+            if (!candidate.equals(target) && random.nextBoolean()) {
                 coalition.add(candidate);
             }
         }

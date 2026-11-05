@@ -158,6 +158,9 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
             if (!ascending) {
                 comparator = comparator.reversed();
             }
+            // The comparator already points at the end of the ranking that decides the
+            // selection: the largest scores when scoring bad axioms, the smallest when
+            // scoring weakenings.
             List<OWLAxiom> ranking = averaged.entrySet().stream()
                     .sorted(comparator)
                     .limit(5)
@@ -224,6 +227,10 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
                 for (int i = 0; i < samplesForWorker; i++) {
                     Collections.shuffle(permutation, random);
 
+                    // The prefix must contain every axiom preceding the current one,
+                    // including the other targets; otherwise the marginal contribution is
+                    // computed with respect to a coalition that is missing players, and the
+                    // value is no longer the Shapley value of the axiom in the universe.
                     Set<OWLAxiom> prefixBase = new HashSet<>();
                     for (OWLAxiom current : permutation) {
                         if (targets.contains(current)) {
@@ -231,9 +238,8 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
                             prefixWith.add(current);
                             double marginal = drasticInconsistencyValue(prefixWith) - drasticInconsistencyValue(prefixBase);
                             localTotals.merge(current, marginal, Double::sum);
-                        } else {
-                            prefixBase.add(current);
                         }
+                        prefixBase.add(current);
                     }
                 }
                 return localTotals;
