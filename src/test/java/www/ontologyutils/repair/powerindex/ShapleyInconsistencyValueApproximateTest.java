@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.HashMap;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
@@ -84,6 +85,42 @@ public class ShapleyInconsistencyValueApproximateTest {
 
             var powerIndex = new ShapleyInconsistencyValueApproximate(735, 13L);
             assertEquals(1.0 / 3.0, powerIndex.computeScore(universe, badAxiom), 0.1);
+        }
+    }
+
+    /**
+     * Every target must be scored in the game {@code axioms u {target}}, exactly
+     * like {@link #computeScore(Set, OWLAxiom)}. Scoring the candidates in one
+     * shared game would let a candidate influence the score of its siblings.
+     */
+    @Test
+    public void batchScoresUseTheGameOfEachTargetAlone() {
+        try (var ontology = Ontology.loadOntology(resourcePath())) {
+            var axioms = ontology.refutableAxioms()
+                    .collect(Collectors.toMap(Utils::prettyPrintAxiomDL, axiom -> axiom));
+            var disjointUnion = axioms.get("LeftPolicy=RaiseWages \u2294 RaiseWelfare");
+            var raiseWages = axioms.get("RaiseWages(Sweden)");
+            var raiseWelfare = axioms.get("RaiseWelfare(Sweden)");
+            var leftPolicy = axioms.get("LeftPolicy(Sweden)");
+
+            var powerIndex = new ShapleyInconsistencyValueApproximate(735, 13L);
+
+            // On their own the two candidates are harmless, so each scores 0 in its own
+            // game; a shared game would make them score 1/2 each.
+            var harmless = powerIndex.computeScores(Set.of(disjointUnion), Set.of(raiseWages, raiseWelfare));
+            assertEquals(0.0, harmless.get(raiseWages), 1e-9,
+                    "the sibling candidate must not be a player of the game");
+            assertEquals(0.0, harmless.get(raiseWelfare), 1e-9,
+                    "the sibling candidate must not be a player of the game");
+
+            // One candidate completes the contradiction, the other one is inert. The value is
+            // 1/3: the candidate only causes inconsistency when its prefix holds both the
+            // disjoint union and RaiseWelfare(Sweden).
+            var context = Set.of(disjointUnion, raiseWelfare);
+            var mixed = powerIndex.computeScores(context, Set.of(raiseWages, leftPolicy));
+            assertEquals(powerIndex.computeScore(context, raiseWages), mixed.get(raiseWages), 0.06);
+            assertEquals(1.0 / 3.0, mixed.get(raiseWages), 0.06);
+            assertEquals(0.0, mixed.get(leftPolicy), 0.06);
         }
     }
 }

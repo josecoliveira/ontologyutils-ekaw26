@@ -70,10 +70,9 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
     }
 
     /**
-     * Batch scoring for multiple targets. This shares permutations across all
-     * targets while preserving the semantics that each target is evaluated in
-     * the context of {@code axioms} (i.e. scoring each target as if it were
-     * added alone to the base set).
+     * Batch scoring for multiple targets. Each target is scored in the game
+     * {@code axioms u {target}}, exactly like {@link #computeScore(Set, OWLAxiom)},
+     * and the permutations are shared across the targets to save reasoning calls.
      */
     public Map<OWLAxiom, Double> computeScores(Set<OWLAxiom> axioms, Set<OWLAxiom> targets) {
         if (targets == null || targets.isEmpty()) {
@@ -84,7 +83,7 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
         universe.addAll(targets);
 
         // deterministic ordering
-        List<OWLAxiom> orderedUniverse = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+        List<OWLAxiom> orderedContext = axioms.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 
         Map<OWLAxiom, Double> totals = new HashMap<>();
         for (OWLAxiom t : targets) {
@@ -92,7 +91,7 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
         }
 
         long baseSeed = seedFor(universe, targets);
-        mergeTotals(totals, sampleTargetsInParallel(orderedUniverse, targets, approximationSamples, baseSeed));
+        mergeTotals(totals, sampleTargetsInParallel(orderedContext, targets, approximationSamples, baseSeed));
 
         // average
         Map<OWLAxiom, Double> averaged = new HashMap<>();
@@ -113,7 +112,10 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
     }
 
     /**
-     * Adaptive scoring with explicit ranking direction.
+     * Adaptive scoring with explicit ranking direction. Each target is scored in
+     * the game {@code axioms u {target}}, exactly like
+     * {@link #computeScore(Set, OWLAxiom)}.
+     *
      * @param ascending
      *            true for smaller scores being better (weakenings), false for
      *            larger scores being better (bad axioms).
@@ -129,7 +131,7 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
 
         Set<OWLAxiom> universe = new HashSet<>(axioms);
         universe.addAll(targets);
-        List<OWLAxiom> orderedUniverse = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+        List<OWLAxiom> orderedContext = axioms.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 
         Map<OWLAxiom, Double> totals = new HashMap<>();
         for (OWLAxiom t : targets) {
@@ -142,7 +144,7 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
 
         while (used < maxSamples) {
             int batch = Math.min(chunkSize, maxSamples - used);
-            mergeTotals(totals, sampleTargetsInParallel(orderedUniverse, targets, batch, mixSeed(baseSeed, used)));
+            mergeTotals(totals, sampleTargetsInParallel(orderedContext, targets, batch, mixSeed(baseSeed, used)));
             used += batch;
 
             // compute averaged scores so far
@@ -212,7 +214,7 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
         return drasticCached.apply(key);
     }
 
-    private Map<OWLAxiom, Double> sampleTargetsInParallel(List<OWLAxiom> orderedUniverse, Set<OWLAxiom> targets,
+    private Map<OWLAxiom, Double> sampleTargetsInParallel(List<OWLAxiom> orderedContext, Set<OWLAxiom> targets,
             int samples, long seed) {
         var tasks = new ArrayList<Callable<Map<OWLAxiom, Double>>>();
         int workers = Math.min(PARALLEL_SAMPLING_THREADS, samples);
@@ -221,16 +223,22 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
             final int samplesForWorker = shares[worker];
             final int workerIndex = worker;
             tasks.add(() -> {
-                List<OWLAxiom> permutation = new ArrayList<>(orderedUniverse);
+                List<OWLAxiom> permutation = new ArrayList<>(orderedContext);
+                Set<OWLAxiom> context = new HashSet<>(orderedContext);
+                // Targets outside the context are scored in stage 2, all others in stage 1.
+                List<OWLAxiom> outerTargets = targets.stream().filter(target -> !context.contains(target))
+                        .sorted().collect(Collectors.toList());
                 Random random = new Random(mixSeed(seed, workerIndex));
                 Map<OWLAxiom, Double> localTotals = new HashMap<>();
+                // One iteration draws one permutation of the context and adds one sample of
+                // the marginal contribution of every target.
                 for (int i = 0; i < samplesForWorker; i++) {
                     Collections.shuffle(permutation, random);
 
-                    // The prefix must contain every axiom preceding the current one,
-                    // including the other targets; otherwise the marginal contribution is
-                    // computed with respect to a coalition that is missing players, and the
-                    // value is no longer the Shapley value of the axiom in the universe.
+                    // Stage 1: targets that are players of the context, which is the whole
+                    // ontology when selecting a bad axiom. The prefix of such a target is
+                    // everything before it in the permutation, targets included, so a single
+                    // sweep scores them all.
                     Set<OWLAxiom> prefixBase = new HashSet<>();
                     for (OWLAxiom current : permutation) {
                         if (targets.contains(current)) {
@@ -240,6 +248,17 @@ public class ShapleyInconsistencyValueApproximate implements PowerIndex {
                             localTotals.merge(current, marginal, Double::sum);
                         }
                         prefixBase.add(current);
+                    }
+                    // Stage 2: targets outside the context, which is the case for candidate
+                    // weakenings. Inserting the target at a uniformly drawn cut of the
+                    // permutation yields a uniform permutation of context u {target}, without
+                    // making the other candidates players of its game.
+                    for (OWLAxiom target : outerTargets) {
+                        Set<OWLAxiom> prefix = new HashSet<>(permutation.subList(0, random.nextInt(permutation.size() + 1)));
+                        Set<OWLAxiom> prefixWith = new HashSet<>(prefix);
+                        prefixWith.add(target);
+                        double marginal = drasticInconsistencyValue(prefixWith) - drasticInconsistencyValue(prefix);
+                        localTotals.merge(target, marginal, Double::sum);
                     }
                 }
                 return localTotals;

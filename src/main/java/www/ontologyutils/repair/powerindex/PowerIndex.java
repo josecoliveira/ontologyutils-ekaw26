@@ -27,7 +27,10 @@ public interface PowerIndex {
     double computeScore(Set<OWLAxiom> axioms, OWLAxiom targetAxiom);
 
     /**
-     * Compute scores for multiple target axioms. Default implementation
+     * Compute scores for multiple target axioms. Each target is scored in the
+     * game {@code axioms u {target}}, i.e. exactly as
+     * {@link #computeScore(Set, OWLAxiom)} scores it, so that the batch result
+     * never depends on which other targets are scored. Default implementation
      * falls back to calling {@link #computeScore(Set, OWLAxiom)} repeatedly.
      */
     default Map<OWLAxiom, Double> computeScores(Set<OWLAxiom> axioms, Set<OWLAxiom> targets) {
@@ -46,8 +49,8 @@ public interface PowerIndex {
      * implementation delegates to {@link #computeScores(Set, Set)} without
      * adaptivity.
      *
-     * @param axioms    base universe (targets will be added to this universe for
-     *                  scoring)
+     * @param axioms    base universe (each target is scored in {@code axioms u
+     *                  {target}})
      * @param targets   targets to rank/score
      * @param chunkSize number of samples per chunk
      * @param maxSamples maximum total samples to use

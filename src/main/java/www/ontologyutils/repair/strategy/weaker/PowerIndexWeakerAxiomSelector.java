@@ -1,6 +1,7 @@
 package www.ontologyutils.repair.strategy.weaker;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -17,6 +18,9 @@ import java.io.PrintStream;
 /**
  * Generic PowerIndex-backed weaker-axiom selector. Returns the axiom with the
  * lowest power-index score (less influence).
+ *
+ * Each candidate is scored in the ontology the replacement would produce, that
+ * is the reference set without the bad axiom plus the candidate alone.
  */
 public class PowerIndexWeakerAxiomSelector implements WeakerAxiomSelector {
     private final PowerIndex powerIndex;
@@ -43,7 +47,13 @@ public class PowerIndexWeakerAxiomSelector implements WeakerAxiomSelector {
                  return Optional.empty();
              }
             System.err.println("[PowerIndexWeakerAxiomSelector] Scoring " + weakenings.size() + " candidate weakenings for " + Utils.prettyPrintAxiomDL(badAxiom));
-            Map<OWLAxiom, Double> scores = powerIndex.computeScoresAdaptive(context, weakenings, chunkSize, maxSamples, true);
+            // The candidates are scored in the ontology that the replacement produces, so
+            // the bad axiom they replace must not be part of the game; otherwise every
+            // candidate is judged against an ontology that is still inconsistent because of
+            // the very axiom it is meant to replace.
+            var scoringContext = new HashSet<>(context);
+            scoringContext.remove(badAxiom);
+            Map<OWLAxiom, Double> scores = powerIndex.computeScoresAdaptive(scoringContext, weakenings, chunkSize, maxSamples, true);
              var best = scores.entrySet().stream()
                      .min(Comparator.<Map.Entry<OWLAxiom, Double>>comparingDouble(Map.Entry::getValue)
                              .thenComparing(e -> Utils.prettyPrintAxiomDL(e.getKey())))

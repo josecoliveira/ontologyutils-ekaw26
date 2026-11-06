@@ -70,9 +70,9 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
     }
 
     /**
-     * Batch scoring for multiple targets. This shares coalition samples across all
-     * targets while preserving the semantics that each target is evaluated in the
-     * context of {@code axioms}.
+     * Batch scoring for multiple targets. Each target is scored in the game
+     * {@code axioms u {target}}, exactly like {@link #computeScore(Set, OWLAxiom)},
+     * and the coalitions are shared across the targets to save reasoning calls.
      */
     public Map<OWLAxiom, Double> computeScores(Set<OWLAxiom> axioms, Set<OWLAxiom> targets) {
         if (targets == null || targets.isEmpty()) {
@@ -82,7 +82,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
         Set<OWLAxiom> universe = new HashSet<>(axioms);
         universe.addAll(targets);
 
-        List<OWLAxiom> orderedUniverse = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+        List<OWLAxiom> orderedContext = axioms.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 
         Map<OWLAxiom, Double> totals = new HashMap<>();
         for (OWLAxiom t : targets) {
@@ -90,7 +90,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
         }
 
         long baseSeed = seedFor(universe, targets);
-        mergeTotals(totals, sampleTargetsInParallel(orderedUniverse, targets, approximationSamples, baseSeed));
+        mergeTotals(totals, sampleTargetsInParallel(orderedContext, targets, approximationSamples, baseSeed));
 
         Map<OWLAxiom, Double> averaged = new HashMap<>();
         for (Map.Entry<OWLAxiom, Double> e : totals.entrySet()) {
@@ -109,7 +109,9 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
     }
 
     /**
-     * Adaptive scoring with explicit ranking direction.
+     * Adaptive scoring with explicit ranking direction. Each target is scored in
+     * the game {@code axioms u {target}}, exactly like
+     * {@link #computeScore(Set, OWLAxiom)}.
      *
      * @param ascending
      *            true for smaller scores being better (weakenings), false for
@@ -126,7 +128,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
 
         Set<OWLAxiom> universe = new HashSet<>(axioms);
         universe.addAll(targets);
-        List<OWLAxiom> orderedUniverse = universe.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
+        List<OWLAxiom> orderedContext = axioms.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
 
         Map<OWLAxiom, Double> totals = new HashMap<>();
         for (OWLAxiom t : targets) {
@@ -139,7 +141,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
 
         while (used < maxSamples) {
             int batch = Math.min(chunkSize, maxSamples - used);
-            mergeTotals(totals, sampleTargetsInParallel(orderedUniverse, targets, batch, mixSeed(baseSeed, used)));
+            mergeTotals(totals, sampleTargetsInParallel(orderedContext, targets, batch, mixSeed(baseSeed, used)));
             used += batch;
 
             Map<OWLAxiom, Double> averaged = new HashMap<>();
@@ -205,7 +207,7 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
         return drasticCached.apply(key);
     }
 
-    private Map<OWLAxiom, Double> sampleTargetsInParallel(List<OWLAxiom> orderedUniverse, Set<OWLAxiom> targets,
+    private Map<OWLAxiom, Double> sampleTargetsInParallel(List<OWLAxiom> orderedContext, Set<OWLAxiom> targets,
             int samples, long seed) {
         var tasks = new ArrayList<Callable<Map<OWLAxiom, Double>>>();
         int workers = Math.min(PARALLEL_SAMPLING_THREADS, samples);
@@ -218,12 +220,11 @@ public class BanzhafInconsistencyValueApproximate implements PowerIndex {
                 Map<OWLAxiom, Double> localTotals = new HashMap<>();
                 List<OWLAxiom> orderedTargets = targets.stream().sorted().collect(Collectors.toList());
                 for (int i = 0; i < samplesForWorker; i++) {
-                    // The Banzhaf index averages the marginal contribution over all
-                    // coalitions of the other axioms, so the other targets have to be able to
-                    // enter the coalition. Excluding every target made the coalition empty
-                    // whenever the targets were the whole universe, and every marginal
-                    // contribution was then v({phi}) - v({}) = 0.
-                    Set<OWLAxiom> coalition = randomCoalition(orderedUniverse, random);
+                    // One iteration draws one coalition of the context and adds one sample of
+                    // the marginal contribution of every target. A target outside the context
+                    // enters the coalition on top of it; a target inside the context is a
+                    // player of the draw, so removing it gives that target's base coalition.
+                    Set<OWLAxiom> coalition = randomCoalition(orderedContext, random);
 
                     for (OWLAxiom target : orderedTargets) {
                         Set<OWLAxiom> coalitionBase = new HashSet<>(coalition);
