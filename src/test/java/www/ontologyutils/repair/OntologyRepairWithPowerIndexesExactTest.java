@@ -6,31 +6,32 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import www.ontologyutils.refinement.AxiomWeakener;
+import www.ontologyutils.repair.strategy.bad.ShapleyBadAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.ShapleyWeakerAxiomSelector;
 import www.ontologyutils.toolbox.Ontology;
 
 @Execution(ExecutionMode.CONCURRENT)
 public class OntologyRepairWithPowerIndexesExactTest extends OntologyRepairTest {
     @Override
     protected OntologyRepair getRepairForConsistency() {
-        return new OntologyRepairWithPowerIndexes(
-                Ontology::isConsistent,
-                OntologyRepairWithPowerIndexes.RefOntologyStrategy.ONE_MCS,
-                OntologyRepairWithPowerIndexes.BadAxiomStrategy.SHAPLEY_EXACT,
-                OntologyRepairWithPowerIndexes.WeakerAxiomStrategy.SHAPLEY_EXACT,
-                AxiomWeakener.FLAG_DEFAULT,
-                false
-        );
+        return OntologyRepairBuilder.forConsistency()
+                .withRefStrategy(OntologyRepairWeakening.RefOntologyStrategy.ONE_MCS)
+                .withBadSelector(new ShapleyBadAxiomSelector())
+                .withWeakerSelector(new ShapleyWeakerAxiomSelector())
+                .withWeakeningFlags(AxiomWeakener.FLAG_DEFAULT)
+                .withEnhanceRef(false)
+                .build();
     }
 
     @Override
     protected OntologyRepair getRepairForCoherence() {
-        return new OntologyRepairWithPowerIndexes(
-                Ontology::isCoherent,
-                OntologyRepairWithPowerIndexes.RefOntologyStrategy.ONE_MCS,
-                OntologyRepairWithPowerIndexes.BadAxiomStrategy.SHAPLEY_EXACT,
-                OntologyRepairWithPowerIndexes.WeakerAxiomStrategy.SHAPLEY_EXACT,
-                AxiomWeakener.FLAG_DEFAULT,
-                false);
+        return OntologyRepairBuilder.forCoherence()
+                .withRefStrategy(OntologyRepairWeakening.RefOntologyStrategy.ONE_MCS)
+                .withBadSelector(new ShapleyBadAxiomSelector())
+                .withWeakerSelector(new ShapleyWeakerAxiomSelector())
+                .withWeakeningFlags(AxiomWeakener.FLAG_DEFAULT)
+                .withEnhanceRef(false)
+                .build();
     }
 
     @Override

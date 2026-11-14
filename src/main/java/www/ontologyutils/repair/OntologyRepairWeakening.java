@@ -7,8 +7,8 @@ import java.util.stream.*;
 import org.semanticweb.owlapi.model.*;
 
 import www.ontologyutils.refinement.AxiomWeakener;
-import www.ontologyutils.repair.strategy.ref.RefOntologySelector;
 import www.ontologyutils.repair.strategy.bad.BadAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.RandomWeakerAxiomSelector;
 import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelector;
 import www.ontologyutils.toolbox.*;
 
@@ -62,8 +62,8 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
      * adding more data using axiom weakening.
      */
     protected boolean enhanceRef;
-    // Strategy selectors (can be provided explicitly or constructed from enums)
-    protected final RefOntologySelector refSelector;
+    // Strategies for the two selection steps (can be provided explicitly or
+    // constructed from enums)
     protected final BadAxiomSelector badSelector;
     protected final WeakerAxiomSelector weakerSelector;
 
@@ -75,8 +75,7 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
             BadAxiomStrategy badAxiomSource, int weakeningFlags, boolean enhanceRef) {
         super(isRepaired, badAxiomSource);
         this.refOntologySource = refOntologySource;
-        // construct selectors from enums
-        this.refSelector = new www.ontologyutils.repair.strategy.ref.McsRefOntologySelector(refOntologySource);
+        // construct the selectors from the enums
         this.badSelector = new BadAxiomSelector() {
             @Override
             public java.util.Optional<org.semanticweb.owlapi.model.OWLAxiom> selectBest(Ontology ontology, java.util.function.Predicate<Ontology> isRepaired) {
@@ -85,23 +84,23 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
                 return java.util.Optional.of(Utils.randomChoice(list));
             }
         };
-        this.weakerSelector = new www.ontologyutils.repair.strategy.weaker.RandomWeakerAxiomSelector();
+        this.weakerSelector = new RandomWeakerAxiomSelector();
         this.weakeningFlags = weakeningFlags;
         this.enhanceRef = enhanceRef;
     }
 
     /**
-     * Primary constructor accepting explicit selector strategies.
+     * Primary constructor accepting explicit selectors for the two selection
+     * steps.
      */
     public OntologyRepairWeakening(Predicate<Ontology> isRepaired,
-            RefOntologySelector refSelector,
+            RefOntologyStrategy refOntologySource,
             BadAxiomSelector badSelector,
             WeakerAxiomSelector weakerSelector,
             int weakeningFlags,
             boolean enhanceRef) {
         super(isRepaired, null);
-        this.refOntologySource = RefOntologyStrategy.ONE_MCS;
-        this.refSelector = refSelector;
+        this.refOntologySource = refOntologySource;
         this.badSelector = badSelector;
         this.weakerSelector = weakerSelector;
         this.weakeningFlags = weakeningFlags;
@@ -166,12 +165,39 @@ public class OntologyRepairWeakening extends OntologyRepairRemoval {
     /**
      * @param ontology
      *            The ontology to find a reference ontology for.
-     * @return The set of axioms to include in the reference ontology to use for
-     *         repairs.
+     * @return The sets of axioms a reference ontology can be built from; the
+     *         caller picks one of them at random.
      */
-    public Stream<Set<OWLAxiom>> getRefAxioms(Ontology ontology) {
-        if (refSelector == null) return Stream.of();
-        return refSelector.select(ontology, isRepaired);
+    protected Stream<Set<OWLAxiom>> getRefAxioms(Ontology ontology) {
+        switch (refOntologySource) {
+            case INTERSECTION_OF_MCS:
+                return Stream.of(mcsIntersection(ontology.maximalConsistentSubsets(isRepaired)));
+            case INTERSECTION_OF_SOME_MCS:
+                return Stream.of(mcsIntersection(ontology.someMaximalConsistentSubsets(isRepaired)));
+            case LARGEST_MCS:
+                return ontology.largestMaximalConsistentSubsets(isRepaired);
+            case RANDOM_MCS:
+                return ontology.maximalConsistentSubsets(isRepaired);
+            case SOME_MCS:
+                return ontology.someMaximalConsistentSubsets(isRepaired);
+            case ONE_MCS: {
+                var mcs = ontology.maximalConsistentSubset(isRepaired);
+                if (mcs == null) {
+                    return Stream.of();
+                } else {
+                    return Stream.of(mcs);
+                }
+            }
+            default:
+                throw new IllegalArgumentException("Unimplemented reference ontology choice strategy.");
+        }
+    }
+
+    private static Set<OWLAxiom> mcsIntersection(Stream<Set<OWLAxiom>> sets) {
+        return sets.reduce((a, b) -> {
+            a.removeIf(axiom -> !b.contains(axiom));
+            return a;
+        }).orElse(Set.of());
     }
 
     @Override

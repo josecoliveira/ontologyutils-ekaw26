@@ -17,8 +17,7 @@ public class RandomWeakerAxiomSelector implements WeakerAxiomSelector {
     @Override
     public Optional<OWLAxiom> selectBest(OWLAxiom badAxiom, AxiomWeakener weakener, Set<OWLAxiom> context) {
         try {
-            var weakenings = weakener.weakerAxioms(badAxiom).collect(Collectors.toSet());
-            weakenings.remove(badAxiom);
+            var weakenings = WeakerAxiomSelector.weakeningsOf(badAxiom, weakener);
             if (weakenings.isEmpty()) {
                 GlobalLogger.info("RandomWeakerAxiomSelector", "No weakenings found for axiom: " + Utils.prettyPrintAxiomDL(badAxiom));
                 return Optional.empty();

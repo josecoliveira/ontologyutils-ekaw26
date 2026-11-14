@@ -6,30 +6,32 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import www.ontologyutils.refinement.AxiomWeakener;
+import www.ontologyutils.repair.strategy.bad.ShapleyApproxBadAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.ShapleyApproxWeakerAxiomSelector;
 import www.ontologyutils.toolbox.Ontology;
 
 @Execution(ExecutionMode.CONCURRENT)
 public class OntologyRepairWithPowerIndexesApproximateTest extends OntologyRepairTest {
     @Override
     protected OntologyRepair getRepairForConsistency() {
-        return new OntologyRepairWithPowerIndexes(
-                Ontology::isConsistent,
-                OntologyRepairWithPowerIndexes.RefOntologyStrategy.ONE_MCS,
-                OntologyRepairWithPowerIndexes.BadAxiomStrategy.SHAPLEY_APPROXIMATE,
-                OntologyRepairWithPowerIndexes.WeakerAxiomStrategy.SHAPLEY_APPROXIMATE,
-                AxiomWeakener.FLAG_DEFAULT,
-                false);
+        return OntologyRepairBuilder.forConsistency()
+                .withRefStrategy(OntologyRepairWeakening.RefOntologyStrategy.ONE_MCS)
+                .withBadSelector(new ShapleyApproxBadAxiomSelector())
+                .withWeakerSelector(new ShapleyApproxWeakerAxiomSelector())
+                .withWeakeningFlags(AxiomWeakener.FLAG_DEFAULT)
+                .withEnhanceRef(false)
+                .build();
     }
 
     @Override
     protected OntologyRepair getRepairForCoherence() {
-        return new OntologyRepairWithPowerIndexes(
-                Ontology::isCoherent,
-                OntologyRepairWithPowerIndexes.RefOntologyStrategy.ONE_MCS,
-                OntologyRepairWithPowerIndexes.BadAxiomStrategy.SHAPLEY_APPROXIMATE,
-                OntologyRepairWithPowerIndexes.WeakerAxiomStrategy.SHAPLEY_APPROXIMATE,
-                AxiomWeakener.FLAG_DEFAULT,
-                false);
+        return OntologyRepairBuilder.forCoherence()
+                .withRefStrategy(OntologyRepairWeakening.RefOntologyStrategy.ONE_MCS)
+                .withBadSelector(new ShapleyApproxBadAxiomSelector())
+                .withWeakerSelector(new ShapleyApproxWeakerAxiomSelector())
+                .withWeakeningFlags(AxiomWeakener.FLAG_DEFAULT)
+                .withEnhanceRef(false)
+                .build();
     }
 
     @Override

@@ -17,13 +17,11 @@ import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 import openllet.owlapi.OpenlletReasonerFactory;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 import www.ontologyutils.normalization.SroiqNormalization;
-import www.ontologyutils.repair.OntologyRepairBuilder;
-import www.ontologyutils.repair.powerindex.PowerIndexType;
 import www.ontologyutils.refinement.AxiomStrengthener;
+import www.ontologyutils.repair.strategy.bad.ShapleyApproxBadAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.ShapleyApproxWeakerAxiomSelector;
 import www.ontologyutils.repair.*;
 import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
-import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.BadAxiomStrategy;
-import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.WeakerAxiomStrategy;
 import www.ontologyutils.toolbox.*;
 
 /**
@@ -84,7 +82,9 @@ public class RepairComparisonExperiment extends App {
     private OntologyRepair createPowerIndexRepair() {
         return OntologyRepairBuilder.forConsistency()
                 .withRefStrategy(RefOntologyStrategy.ONE_MCS)
-                .withPowerIndex(PowerIndexType.SHAPLEY_APPROXIMATE)
+                .withBadSelector(new ShapleyApproxBadAxiomSelector())
+                .withWeakerSelector(
+                        new ShapleyApproxWeakerAxiomSelector())
                 .withWeakeningFlags(AxiomStrengthener.FLAG_SROIQ_STRICT | AxiomStrengthener.FLAG_SIMPLE_ROLES_STRICT
                         | AxiomStrengthener.FLAG_RIA_ONLY_SIMPLE | AxiomStrengthener.FLAG_ALC_STRICT
                         | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS)
