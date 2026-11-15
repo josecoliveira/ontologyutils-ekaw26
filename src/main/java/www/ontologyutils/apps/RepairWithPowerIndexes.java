@@ -5,8 +5,16 @@ import java.util.*;
 import www.ontologyutils.refinement.AxiomWeakener;
 import www.ontologyutils.repair.*;
 import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
-import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.BadAxiomStrategy;
-import www.ontologyutils.repair.OntologyRepairWithPowerIndexes.WeakerAxiomStrategy;
+import www.ontologyutils.repair.strategy.bad.BadAxiomSelector;
+import www.ontologyutils.repair.strategy.bad.BanzhafApproxBadAxiomSelector;
+import www.ontologyutils.repair.strategy.bad.BanzhafBadAxiomSelector;
+import www.ontologyutils.repair.strategy.bad.ShapleyApproxBadAxiomSelector;
+import www.ontologyutils.repair.strategy.bad.ShapleyBadAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.BanzhafApproxWeakerAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.BanzhafWeakerAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.ShapleyApproxWeakerAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.ShapleyWeakerAxiomSelector;
+import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelector;
 import www.ontologyutils.toolbox.Ontology;
 
 /**
@@ -25,10 +33,20 @@ public class RepairWithPowerIndexes extends RepairApp {
             "bernard2023", AxiomWeakener.FLAG_SROIQ_STRICT | AxiomWeakener.FLAG_SIMPLE_ROLES_STRICT
                     | AxiomWeakener.FLAG_RIA_ONLY_SIMPLE | AxiomWeakener.FLAG_OWL2_SET_OPERANDS);
 
+    /**
+     * The inconsistency-value notions this app offers for each of the two stages.
+     */
+    private enum Method {
+        SHAPLEY_EXACT,
+        SHAPLEY_APPROX,
+        BANZHAF_EXACT,
+        BANZHAF_APPROX
+    }
+
     private boolean coherence = false;
     private RefOntologyStrategy refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
-    private BadAxiomStrategy badAxiomStrategy = BadAxiomStrategy.BANZHAF_APPROXIMATE;
-    private WeakerAxiomStrategy weakerAxiomStrategy = WeakerAxiomStrategy.BANZHAF_APPROXIMATE;
+    private Method badAxiomStrategy = Method.BANZHAF_APPROX;
+    private Method weakerAxiomStrategy = Method.BANZHAF_APPROX;
     private int weakeningFlags = AxiomWeakener.FLAG_DEFAULT;
     private boolean enhanceRef = false;
 
@@ -38,16 +56,20 @@ public class RepairWithPowerIndexes extends RepairApp {
         options.addAll(super.appOptions());
         options.add(OptionType.FLAG.create("coherence", b -> coherence = true, "make the ontology coherent"));
         options.add(OptionType.FLAG.create("power-index-shapley-exact", b -> {
-            badAxiomStrategy = BadAxiomStrategy.SHAPLEY_EXACT;
-            weakerAxiomStrategy = WeakerAxiomStrategy.SHAPLEY_EXACT;
+            badAxiomStrategy = Method.SHAPLEY_EXACT;
+            weakerAxiomStrategy = Method.SHAPLEY_EXACT;
         }, "use exact Shapley value for bad and weaker axiom selection"));
-        options.add(OptionType.FLAG.create("power-index-shapley-approximate", b -> {
-            badAxiomStrategy = BadAxiomStrategy.SHAPLEY_APPROXIMATE;
-            weakerAxiomStrategy = WeakerAxiomStrategy.SHAPLEY_APPROXIMATE;
+        options.add(OptionType.FLAG.create("power-index-shapley-approx", b -> {
+            badAxiomStrategy = Method.SHAPLEY_APPROX;
+            weakerAxiomStrategy = Method.SHAPLEY_APPROX;
         }, "use approximate Shapley value for bad and weaker axiom selection"));
-        options.add(OptionType.FLAG.create("power-index-banzhaf-approximate", b -> {
-            badAxiomStrategy = BadAxiomStrategy.BANZHAF_APPROXIMATE;
-            weakerAxiomStrategy = WeakerAxiomStrategy.BANZHAF_APPROXIMATE;
+        options.add(OptionType.FLAG.create("power-index-banzhaf-exact", b -> {
+            badAxiomStrategy = Method.BANZHAF_EXACT;
+            weakerAxiomStrategy = Method.BANZHAF_EXACT;
+        }, "use exact Banzhaf value for bad and weaker axiom selection"));
+        options.add(OptionType.FLAG.create("power-index-banzhaf-approx", b -> {
+            badAxiomStrategy = Method.BANZHAF_APPROX;
+            weakerAxiomStrategy = Method.BANZHAF_APPROX;
         }, "use approximate Banzhaf value for bad and weaker axiom selection"));
         options.add(OptionType.options(
                 Map.of("intersect", RefOntologyStrategy.INTERSECTION_OF_MCS,
@@ -59,15 +81,17 @@ public class RepairWithPowerIndexes extends RepairApp {
                 .create("ref-ontology", method -> refOntologyStrategy = method,
                         "method for reference ontology selection"));
         options.add(OptionType.options(
-                Map.of("shapley-exact", BadAxiomStrategy.SHAPLEY_EXACT,
-                        "shapley-approximate", BadAxiomStrategy.SHAPLEY_APPROXIMATE,
-                        "banzhaf-approximate", BadAxiomStrategy.BANZHAF_APPROXIMATE))
+                Map.of("shapley-exact", Method.SHAPLEY_EXACT,
+                        "shapley-approx", Method.SHAPLEY_APPROX,
+                        "banzhaf-exact", Method.BANZHAF_EXACT,
+                        "banzhaf-approx", Method.BANZHAF_APPROX))
                 .create("bad-axiom", method -> badAxiomStrategy = method,
                         "method for bad axiom selection"));
         options.add(OptionType.options(
-                Map.of("shapley-exact", WeakerAxiomStrategy.SHAPLEY_EXACT,
-                        "shapley-approximate", WeakerAxiomStrategy.SHAPLEY_APPROXIMATE,
-                        "banzhaf-approximate", WeakerAxiomStrategy.BANZHAF_APPROXIMATE))
+                Map.of("shapley-exact", Method.SHAPLEY_EXACT,
+                        "shapley-approx", Method.SHAPLEY_APPROX,
+                        "banzhaf-exact", Method.BANZHAF_EXACT,
+                        "banzhaf-approx", Method.BANZHAF_APPROX))
                 .create("weaker-axiom", method -> weakerAxiomStrategy = method,
                         "method for weaker axiom selection"));
         options.add(OptionType.FLAG.create("strict-nnf", b -> {
@@ -116,24 +140,30 @@ public class RepairWithPowerIndexes extends RepairApp {
     @Override
     protected OntologyRepair getRepair() {
         var builder = coherence ? OntologyRepairBuilder.forCoherence() : OntologyRepairBuilder.forConsistency();
-        builder.withRefStrategy(refOntologyStrategy);
-        builder.withWeakeningFlags(weakeningFlags);
-        builder.withEnhanceRef(enhanceRef);
-        // Map power-index selection to PowerIndexType if requested
-        switch (badAxiomStrategy) {
-            case SHAPLEY_EXACT -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.SHAPLEY_EXACT);
-            case SHAPLEY_APPROXIMATE -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.SHAPLEY_APPROXIMATE);
-            case BANZHAF_APPROXIMATE -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.BANZHAF_APPROXIMATE);
-            default -> {
-                // no-op: use default bad-axiom selector
-            }
-        }
-        // For weaker strategy we prefer to use the same power-index type when applicable
-        switch (weakerAxiomStrategy) {
-            case SHAPLEY_EXACT, SHAPLEY_APPROXIMATE, BANZHAF_APPROXIMATE -> builder.withPowerIndex(www.ontologyutils.repair.powerindex.PowerIndexType.valueOf(weakerAxiomStrategy.name()));
-            default -> {}
-        }
+        builder.withRefStrategy(refOntologyStrategy)
+                .withBadSelector(badAxiomSelector(badAxiomStrategy))
+                .withWeakerSelector(weakerAxiomSelector(weakerAxiomStrategy))
+                .withWeakeningFlags(weakeningFlags)
+                .withEnhanceRef(enhanceRef);
         return builder.build();
+    }
+
+    private static BadAxiomSelector badAxiomSelector(Method method) {
+        return switch (method) {
+            case SHAPLEY_EXACT -> new ShapleyBadAxiomSelector();
+            case SHAPLEY_APPROX -> new ShapleyApproxBadAxiomSelector();
+            case BANZHAF_EXACT -> new BanzhafBadAxiomSelector();
+            case BANZHAF_APPROX -> new BanzhafApproxBadAxiomSelector();
+        };
+    }
+
+    private static WeakerAxiomSelector weakerAxiomSelector(Method method) {
+        return switch (method) {
+            case SHAPLEY_EXACT -> new ShapleyWeakerAxiomSelector();
+            case SHAPLEY_APPROX -> new ShapleyApproxWeakerAxiomSelector();
+            case BANZHAF_EXACT -> new BanzhafWeakerAxiomSelector();
+            case BANZHAF_APPROX -> new BanzhafApproxWeakerAxiomSelector();
+        };
     }
 
     /**

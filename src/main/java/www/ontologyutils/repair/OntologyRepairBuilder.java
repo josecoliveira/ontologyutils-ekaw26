@@ -1,37 +1,29 @@
 package www.ontologyutils.repair;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import www.ontologyutils.repair.strategy.ref.McsRefOntologySelector;
-import www.ontologyutils.repair.strategy.ref.RefOntologySelector;
+import www.ontologyutils.refinement.AxiomWeakener;
 import www.ontologyutils.repair.strategy.bad.BadAxiomSelector;
 import www.ontologyutils.repair.strategy.bad.DefaultBadAxiomSelector;
-import www.ontologyutils.repair.strategy.bad.PowerIndexBadAxiomSelector;
-import www.ontologyutils.repair.strategy.weaker.PowerIndexWeakerAxiomSelector;
 import www.ontologyutils.repair.strategy.weaker.RandomWeakerAxiomSelector;
 import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelector;
-import www.ontologyutils.repair.strategy.bad.BadAxiomSelector;
-import www.ontologyutils.repair.powerindex.PowerIndexRegistry;
-import www.ontologyutils.repair.powerindex.PowerIndexType;
-import www.ontologyutils.refinement.AxiomWeakener;
 import www.ontologyutils.toolbox.Ontology;
 
 /**
- * Fluent builder for creating OntologyRepairWeakening instances using selector
- * strategies and power-index configuration.
+ * Fluent builder for creating {@link OntologyRepairWeakening} instances.
+ *
+ * <p>
+ * The two selection steps are configured independently, each with any
+ * {@link BadAxiomSelector} or {@link WeakerAxiomSelector}. The builder knows
+ * nothing about power indexes: a selection rule based on one is passed in like
+ * any other, which keeps the two interfaces the only contract to implement.
  */
 public class OntologyRepairBuilder {
     private java.util.function.Predicate<Ontology> isRepaired;
-    private RefOntologySelector refSelector;
+    private OntologyRepairWeakening.RefOntologyStrategy refOntologyStrategy =
+            OntologyRepairWeakening.RefOntologyStrategy.ONE_MCS;
     private BadAxiomSelector badSelector;
     private WeakerAxiomSelector weakerSelector;
     private int weakeningFlags = AxiomWeakener.FLAG_DEFAULT;
     private boolean enhanceRef = true;
-    private PowerIndexType powerIndexType;
-    private Map<String, Object> powerIndexConfig = new HashMap<>();
-    private int chunkSize = 50;
-    private int maxSamples = 1000;
 
     private OntologyRepairBuilder(java.util.function.Predicate<Ontology> isRepaired) {
         this.isRepaired = isRepaired;
@@ -45,13 +37,8 @@ public class OntologyRepairBuilder {
         return new OntologyRepairBuilder(Ontology::isCoherent);
     }
 
-    public OntologyRepairBuilder withRefSelector(RefOntologySelector selector) {
-        this.refSelector = selector;
-        return this;
-    }
-
     public OntologyRepairBuilder withRefStrategy(OntologyRepairWeakening.RefOntologyStrategy strategy) {
-        this.refSelector = new McsRefOntologySelector(strategy);
+        this.refOntologyStrategy = strategy;
         return this;
     }
 
@@ -70,27 +57,6 @@ public class OntologyRepairBuilder {
         return this;
     }
 
-    public OntologyRepairBuilder withWeakerStrategyRandom() {
-        this.weakerSelector = new RandomWeakerAxiomSelector();
-        return this;
-    }
-
-    public OntologyRepairBuilder withPowerIndex(PowerIndexType type) {
-        this.powerIndexType = type;
-        return this;
-    }
-
-    public OntologyRepairBuilder withPowerIndexConfig(Map<String, Object> config) {
-        this.powerIndexConfig = config != null ? config : Map.of();
-        return this;
-    }
-
-    public OntologyRepairBuilder withPowerIndexSampling(int chunkSize, int maxSamples) {
-        this.chunkSize = chunkSize;
-        this.maxSamples = maxSamples;
-        return this;
-    }
-
     public OntologyRepairBuilder withWeakeningFlags(int flags) {
         this.weakeningFlags = flags;
         return this;
@@ -102,28 +68,10 @@ public class OntologyRepairBuilder {
     }
 
     public OntologyRepair build() {
-        // defaults
-        if (refSelector == null) {
-            refSelector = new McsRefOntologySelector(OntologyRepairWeakening.RefOntologyStrategy.ONE_MCS);
-        }
-        if (badSelector == null) {
-            if (powerIndexType != null) {
-                var pi = PowerIndexRegistry.create(powerIndexType, powerIndexConfig);
-                badSelector = new PowerIndexBadAxiomSelector(pi, chunkSize, maxSamples);
-            } else {
-                badSelector = new DefaultBadAxiomSelector(OntologyRepairRemoval.BadAxiomStrategy.IN_SOME_MUS);
-            }
-        }
-        if (weakerSelector == null) {
-            if (powerIndexType != null) {
-                var pi = PowerIndexRegistry.create(powerIndexType, powerIndexConfig);
-                weakerSelector = new PowerIndexWeakerAxiomSelector(pi, chunkSize, maxSamples);
-            } else {
-                weakerSelector = new RandomWeakerAxiomSelector();
-            }
-        }
-
-        return new OntologyRepairWeakening(isRepaired, refSelector, badSelector, weakerSelector, weakeningFlags, enhanceRef);
+        var bad = badSelector != null
+                ? badSelector
+                : new DefaultBadAxiomSelector(OntologyRepairRemoval.BadAxiomStrategy.IN_SOME_MUS);
+        var weaker = weakerSelector != null ? weakerSelector : new RandomWeakerAxiomSelector();
+        return new OntologyRepairWeakening(isRepaired, refOntologyStrategy, bad, weaker, weakeningFlags, enhanceRef);
     }
 }
-
