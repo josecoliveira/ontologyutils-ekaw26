@@ -4,20 +4,45 @@ import java.util.*;
 
 import www.ontologyutils.refinement.AxiomWeakener;
 import www.ontologyutils.repair.*;
-import www.ontologyutils.repair.OntologyRepairRemoval.BadAxiomStrategy;
-import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
-import www.ontologyutils.toolbox.Ontology;
 import www.ontologyutils.repair.OntologyRepairBuilder;
+import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
+import www.ontologyutils.repair.strategy.bad.BadAxiomSelectors;
+import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelectors;
+import www.ontologyutils.toolbox.Ontology;
 
 /**
  * Repair the given ontology using the axiom weakening repair algorithm.
+ *
+ * <p>
+ * Both stages can be ranked either with a structural strategy or with a power
+ * index. This class only names the strategies: it depends on the registries
+ * {@link BadAxiomSelectors} and {@link WeakerAxiomSelectors}, so a new strategy
+ * can be added without touching it.
  */
 public class RepairWeakening extends RepairApp {
+    private static final String DEFAULT_BAD_AXIOM = "some-mus";
+    private static final String DEFAULT_WEAKER_AXIOM = "random";
+
     private boolean coherence = false;
     private RefOntologyStrategy refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
-    private BadAxiomStrategy badAxiomStrategy = BadAxiomStrategy.IN_SOME_MUS;
+    private String badAxiomStrategy = DEFAULT_BAD_AXIOM;
+    private String weakerAxiomStrategy = DEFAULT_WEAKER_AXIOM;
     private int weakeningFlags = AxiomWeakener.FLAG_DEFAULT;
     private boolean enhanceRef = false;
+
+    /**
+     * @param names
+     *            The registered strategy names.
+     * @return An option map that maps every name to itself, so that the help text
+     *         lists the strategies the registries offer.
+     */
+    private static Map<String, String> optionValues(Set<String> names) {
+        var values = new LinkedHashMap<String, String>();
+        for (var name : names) {
+            values.put(name, name);
+        }
+        return values;
+    }
 
     @Override
     protected List<Option<?>> appOptions() {
@@ -27,7 +52,7 @@ public class RepairWeakening extends RepairApp {
                 OptionType.FLAG.create("coherence", b -> coherence = true, "make the ontology coherent"));
         options.add(OptionType.FLAG.create("fast", b -> {
             refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
-            badAxiomStrategy = BadAxiomStrategy.IN_ONE_MUS;
+            badAxiomStrategy = "one-mus";
         }, "use fast methods for selection"));
         options.add(OptionType.options(
                 Map.of("intersect", RefOntologyStrategy.INTERSECTION_OF_MCS,
@@ -38,17 +63,12 @@ public class RepairWeakening extends RepairApp {
                         "random-of-some", RefOntologyStrategy.SOME_MCS))
                 .create("ref-ontology", method -> refOntologyStrategy = method,
                         "method for reference ontology selection"));
-        options.add(OptionType.options(
-                Map.of("one-mus", BadAxiomStrategy.IN_ONE_MUS,
-                        "some-mus", BadAxiomStrategy.IN_SOME_MUS,
-                        "most-mus", BadAxiomStrategy.IN_MOST_MUS,
-                        "least-mcs", BadAxiomStrategy.IN_LEAST_MCS,
-                        "largest-mcs", BadAxiomStrategy.NOT_IN_LARGEST_MCS,
-                        "one-mcs", BadAxiomStrategy.NOT_IN_ONE_MCS,
-                        "some-mcs", BadAxiomStrategy.NOT_IN_SOME_MCS,
-                        "random", BadAxiomStrategy.RANDOM))
+        options.add(OptionType.options(optionValues(BadAxiomSelectors.names()))
                 .create("bad-axiom", method -> badAxiomStrategy = method,
                         "method for bad axiom selection"));
+        options.add(OptionType.options(optionValues(WeakerAxiomSelectors.names()))
+                .create("weaker-axiom", method -> weakerAxiomStrategy = method,
+                        "method for weaker axiom selection"));
         options.add(OptionType.FLAG.create("strict-nnf", b -> {
             weakeningFlags |= AxiomWeakener.FLAG_NNF_STRICT;
         }, "accept and produce only NNF axioms"));
@@ -85,22 +105,20 @@ public class RepairWeakening extends RepairApp {
                         "bernard2023", 2023))
                 .create("preset", preset -> {
                     // Note that these are not exactly the configurations used in the papers.
+                    badAxiomStrategy = "some-mus";
                     if (preset == 2018) {
                         refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
-                        badAxiomStrategy = BadAxiomStrategy.IN_SOME_MUS;
                         weakeningFlags = AxiomWeakener.FLAG_SROIQ_STRICT | AxiomWeakener.FLAG_SIMPLE_ROLES_STRICT
                                 | AxiomWeakener.FLAG_RIA_ONLY_SIMPLE
                                 | AxiomWeakener.FLAG_ALC_STRICT | AxiomWeakener.FLAG_NO_ROLE_REFINEMENT
                                 | AxiomWeakener.FLAG_OWL2_SET_OPERANDS;
                     } else if (preset == 2020) {
                         refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
-                        badAxiomStrategy = BadAxiomStrategy.IN_SOME_MUS;
                         weakeningFlags = AxiomWeakener.FLAG_SROIQ_STRICT | AxiomWeakener.FLAG_SIMPLE_ROLES_STRICT
                                 | AxiomWeakener.FLAG_RIA_ONLY_SIMPLE
                                 | AxiomWeakener.FLAG_SROIQ_STRICT | AxiomWeakener.FLAG_OWL2_SET_OPERANDS;
                     } else if (preset == 2023) {
                         refOntologyStrategy = RefOntologyStrategy.ONE_MCS;
-                        badAxiomStrategy = BadAxiomStrategy.IN_SOME_MUS;
                         weakeningFlags = AxiomWeakener.FLAG_SROIQ_STRICT | AxiomWeakener.FLAG_SIMPLE_ROLES_STRICT
                                 | AxiomWeakener.FLAG_RIA_ONLY_SIMPLE | AxiomWeakener.FLAG_OWL2_SET_OPERANDS;
                     }
@@ -111,7 +129,10 @@ public class RepairWeakening extends RepairApp {
     @Override
     protected OntologyRepair getRepair() {
         var builder = coherence ? OntologyRepairBuilder.forCoherence() : OntologyRepairBuilder.forConsistency();
-        builder.withRefStrategy(refOntologyStrategy).withBadStrategy(badAxiomStrategy).withWeakeningFlags(weakeningFlags)
+        builder.withBadSelector(BadAxiomSelectors.create(badAxiomStrategy))
+                .withWeakerSelector(WeakerAxiomSelectors.create(weakerAxiomStrategy))
+                .withRefStrategy(refOntologyStrategy)
+                .withWeakeningFlags(weakeningFlags)
                 .withEnhanceRef(enhanceRef);
         return builder.build();
     }

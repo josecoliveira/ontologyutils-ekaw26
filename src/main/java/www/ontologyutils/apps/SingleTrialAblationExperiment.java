@@ -16,18 +16,8 @@ import www.ontologyutils.refinement.AxiomStrengthener;
 import www.ontologyutils.repair.*;
 import www.ontologyutils.repair.OntologyRepairBuilder;
 import www.ontologyutils.repair.OntologyRepairWeakening.RefOntologyStrategy;
-import www.ontologyutils.repair.strategy.bad.BadAxiomSelector;
-import www.ontologyutils.repair.strategy.bad.BanzhafApproxBadAxiomSelector;
-import www.ontologyutils.repair.strategy.bad.BanzhafBadAxiomSelector;
-import www.ontologyutils.repair.strategy.bad.DefaultBadAxiomSelector;
-import www.ontologyutils.repair.strategy.bad.ShapleyApproxBadAxiomSelector;
-import www.ontologyutils.repair.strategy.bad.ShapleyBadAxiomSelector;
-import www.ontologyutils.repair.strategy.weaker.BanzhafApproxWeakerAxiomSelector;
-import www.ontologyutils.repair.strategy.weaker.BanzhafWeakerAxiomSelector;
-import www.ontologyutils.repair.strategy.weaker.RandomWeakerAxiomSelector;
-import www.ontologyutils.repair.strategy.weaker.ShapleyApproxWeakerAxiomSelector;
-import www.ontologyutils.repair.strategy.weaker.ShapleyWeakerAxiomSelector;
-import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelector;
+import www.ontologyutils.repair.strategy.bad.BadAxiomSelectors;
+import www.ontologyutils.repair.strategy.weaker.WeakerAxiomSelectors;
 import www.ontologyutils.toolbox.*;
 
 /**
@@ -50,28 +40,12 @@ public class SingleTrialAblationExperiment {
 
     private static final List<String> A_REPAIRS = List.of("A1", "A2", "A3");
 
-    protected enum BadSelectorKind {
-        IN_SOME_MUS,
-        SHAPLEY_APPROX,
-        SHAPLEY_EXACT,
-        BANZHAF_APPROX,
-        BANZHAF_EXACT
-    }
-
-    protected enum WeakerSelectorKind {
-        RANDOM,
-        SHAPLEY_APPROX,
-        SHAPLEY_EXACT,
-        BANZHAF_APPROX,
-        BANZHAF_EXACT
-    }
-
     protected static final class BRepairSpec {
         final String id;
-        final BadSelectorKind badSelector;
-        final WeakerSelectorKind weakerSelector;
+        final String badSelector;
+        final String weakerSelector;
 
-        BRepairSpec(String id, BadSelectorKind badSelector, WeakerSelectorKind weakerSelector) {
+        BRepairSpec(String id, String badSelector, String weakerSelector) {
             this.id = id;
             this.badSelector = badSelector;
             this.weakerSelector = weakerSelector;
@@ -79,15 +53,15 @@ public class SingleTrialAblationExperiment {
     }
 
     protected static final List<BRepairSpec> B_REPAIR_SPECS = List.of(
-            new BRepairSpec("B1", BadSelectorKind.IN_SOME_MUS, WeakerSelectorKind.RANDOM),
-            new BRepairSpec("B2", BadSelectorKind.IN_SOME_MUS, WeakerSelectorKind.SHAPLEY_APPROX),
-            new BRepairSpec("B3", BadSelectorKind.IN_SOME_MUS, WeakerSelectorKind.BANZHAF_APPROX),
-            new BRepairSpec("B4", BadSelectorKind.SHAPLEY_APPROX, WeakerSelectorKind.RANDOM),
-            new BRepairSpec("B5", BadSelectorKind.SHAPLEY_APPROX, WeakerSelectorKind.SHAPLEY_APPROX),
-            new BRepairSpec("B6", BadSelectorKind.SHAPLEY_APPROX, WeakerSelectorKind.BANZHAF_APPROX),
-            new BRepairSpec("B7", BadSelectorKind.BANZHAF_APPROX, WeakerSelectorKind.RANDOM),
-            new BRepairSpec("B8", BadSelectorKind.BANZHAF_APPROX, WeakerSelectorKind.SHAPLEY_APPROX),
-            new BRepairSpec("B9", BadSelectorKind.BANZHAF_APPROX, WeakerSelectorKind.BANZHAF_APPROX));
+            new BRepairSpec("B1", "some-mus", "random"),
+            new BRepairSpec("B2", "some-mus", "shapley-approx"),
+            new BRepairSpec("B3", "some-mus", "banzhaf-approx"),
+            new BRepairSpec("B4", "shapley-approx", "random"),
+            new BRepairSpec("B5", "shapley-approx", "shapley-approx"),
+            new BRepairSpec("B6", "shapley-approx", "banzhaf-approx"),
+            new BRepairSpec("B7", "banzhaf-approx", "random"),
+            new BRepairSpec("B8", "banzhaf-approx", "shapley-approx"),
+            new BRepairSpec("B9", "banzhaf-approx", "banzhaf-approx"));
 
     private static final class RepairPlan {
         final String id;
@@ -139,27 +113,11 @@ public class SingleTrialAblationExperiment {
                 OntologyRepairRemoval.BadAxiomStrategy.NOT_IN_LARGEST_MCS);
     }
 
-    private OntologyRepair createBRepair(BadSelectorKind badSelectorKind, WeakerSelectorKind weakerSelectorKind) {
-        BadAxiomSelector badSelector = switch (badSelectorKind) {
-            case IN_SOME_MUS -> new DefaultBadAxiomSelector(OntologyRepairRemoval.BadAxiomStrategy.IN_SOME_MUS);
-            case SHAPLEY_APPROX -> new ShapleyApproxBadAxiomSelector();
-            case SHAPLEY_EXACT -> new ShapleyBadAxiomSelector();
-            case BANZHAF_APPROX -> new BanzhafApproxBadAxiomSelector();
-            case BANZHAF_EXACT -> new BanzhafBadAxiomSelector();
-        };
-
-        WeakerAxiomSelector weakerSelector = switch (weakerSelectorKind) {
-            case RANDOM -> new RandomWeakerAxiomSelector();
-            case SHAPLEY_APPROX -> new ShapleyApproxWeakerAxiomSelector();
-            case SHAPLEY_EXACT -> new ShapleyWeakerAxiomSelector();
-            case BANZHAF_APPROX -> new BanzhafApproxWeakerAxiomSelector();
-            case BANZHAF_EXACT -> new BanzhafWeakerAxiomSelector();
-        };
-
+    private OntologyRepair createBRepair(String badSelectorName, String weakerSelectorName) {
         return OntologyRepairBuilder.forConsistency()
                 .withRefStrategy(RefOntologyStrategy.ONE_MCS)
-                .withBadSelector(badSelector)
-                .withWeakerSelector(weakerSelector)
+                .withBadSelector(BadAxiomSelectors.create(badSelectorName))
+                .withWeakerSelector(WeakerAxiomSelectors.create(weakerSelectorName))
                 .withWeakeningFlags(AxiomStrengthener.FLAG_SROIQ_STRICT | AxiomStrengthener.FLAG_SIMPLE_ROLES_STRICT
                         | AxiomStrengthener.FLAG_RIA_ONLY_SIMPLE | AxiomStrengthener.FLAG_ALC_STRICT
                         | AxiomStrengthener.FLAG_NO_ROLE_REFINEMENT | AxiomStrengthener.FLAG_OWL2_SET_OPERANDS)
@@ -175,8 +133,7 @@ public class SingleTrialAblationExperiment {
         for (var bSpec : repairSpecs()) {
             plans.add(new RepairPlan(
                     bSpec.id,
-                    "bad-" + bSpec.badSelector.name().toLowerCase(Locale.ROOT) + "-weaker-"
-                            + bSpec.weakerSelector.name().toLowerCase(Locale.ROOT),
+                    "bad-" + bSpec.badSelector + "-weaker-" + bSpec.weakerSelector,
                     () -> createBRepair(bSpec.badSelector, bSpec.weakerSelector),
                     powerIndexTimeout));
         }

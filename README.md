@@ -98,25 +98,34 @@ mvn clean package -DskipTests
 
 ## Run Repair With Power Indexes
 
-Run the repair application directly with the shaded jar on the classpath:
+The weakening repair is the single entry point, and it can rank either stage with a
+power index. Run it directly with the shaded jar on the classpath:
 
 ```bash
-java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/bctt.owl --preset troquard2018 --power-index-shapley-exact --verbose --normalize
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWeakening src/test/resources/ekaw26/inconsistent/bctt.owl --preset troquard2018 --bad-axiom shapley --weaker-axiom shapley --verbose --normalize
 ```
 
 The approximate variant is also available, and it is the configuration reported for
 both stages in the paper:
 
 ```bash
-java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/taxrank.owl --preset troquard2018 --power-index-shapley-approx --verbose --normalize
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWeakening src/test/resources/ekaw26/inconsistent/taxrank.owl --preset troquard2018 --bad-axiom shapley-approx --weaker-axiom shapley-approx --verbose --normalize
 ```
+
+Each stage is selected on its own with `--bad-axiom` and `--weaker-axiom`. The bad axiom
+stage accepts `one-mus`, `some-mus` (the default), `most-mus`, `least-mcs`, `largest-mcs`,
+`one-mcs`, `some-mcs`, `random`, `shapley`, `shapley-approx`, `banzhaf` and
+`banzhaf-approx`; the weaker axiom stage accepts `random` (the default), `shapley`,
+`shapley-approx`, `banzhaf` and `banzhaf-approx`. The two stages are independent,
+for example `--bad-axiom shapley-approx --weaker-axiom random` uses the power index only
+for the bad axiom stage.
 
 You can direct the repaired ontology output to a file using the `-o` or `--output` option.
 
 Example: write the repaired ontology to `results/repair.owl`:
 
 ```bash
-java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWithPowerIndexes src/test/resources/ekaw26/inconsistent/taxrank.owl --preset troquard2018 --power-index-shapley-approx --normalize --output results/repair.owl
+java -cp target/shaded-ontologyutils-0.1.0.jar www.ontologyutils.apps.RepairWeakening src/test/resources/ekaw26/inconsistent/taxrank.owl --preset troquard2018 --bad-axiom shapley-approx --weaker-axiom shapley-approx --normalize --output results/repair.owl
 ```
 
 The inconsistent ontologies used in the paper are in `src/test/resources/ekaw26/inconsistent/`.

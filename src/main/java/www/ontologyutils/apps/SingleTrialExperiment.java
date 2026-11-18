@@ -16,7 +16,7 @@ import java.util.List;
  */
 public class SingleTrialExperiment extends SingleTrialAblationExperiment {
     private static final List<BRepairSpec> SHAPLEY_SPECS = List.of(
-            new BRepairSpec("B5", BadSelectorKind.SHAPLEY_APPROX, WeakerSelectorKind.SHAPLEY_APPROX));
+            new BRepairSpec("B5", "shapley-approx", "shapley-approx"));
 
     @Override
     protected List<BRepairSpec> repairSpecs() {
