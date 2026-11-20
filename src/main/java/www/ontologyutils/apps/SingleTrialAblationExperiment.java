@@ -40,7 +40,7 @@ public class SingleTrialAblationExperiment {
 
     private static final List<String> A_REPAIRS = List.of("A1", "A2", "A3");
 
-    protected static final class BRepairSpec {
+    private static final class BRepairSpec {
         final String id;
         final String badSelector;
         final String weakerSelector;
@@ -52,7 +52,7 @@ public class SingleTrialAblationExperiment {
         }
     }
 
-    protected static final List<BRepairSpec> B_REPAIR_SPECS = List.of(
+    private static final List<BRepairSpec> B_REPAIR_SPECS = List.of(
             new BRepairSpec("B1", "some-mus", "random"),
             new BRepairSpec("B2", "some-mus", "shapley-approx"),
             new BRepairSpec("B3", "some-mus", "banzhaf-approx"),
@@ -130,7 +130,7 @@ public class SingleTrialAblationExperiment {
         plans.add(new RepairPlan("A1", "random-removal", this::createRandomRemovalRepair, removalTimeout));
         plans.add(new RepairPlan("A2", "not-in-largest-mcs-removal", this::createLargestMcsRemovalRepair, removalTimeout));
         plans.add(new RepairPlan("A3", "default-weakening", this::createWeakeningRepair, weakeningTimeout));
-        for (var bSpec : repairSpecs()) {
+        for (var bSpec : B_REPAIR_SPECS) {
             plans.add(new RepairPlan(
                     bSpec.id,
                     "bad-" + bSpec.badSelector + "-weaker-" + bSpec.weakerSelector,
@@ -430,10 +430,6 @@ public class SingleTrialAblationExperiment {
     /**
      * @return The arms this experiment runs, on top of A1, A2 and A3.
      */
-    protected List<BRepairSpec> repairSpecs() {
-        return B_REPAIR_SPECS;
-    }
-
     public static void main(String[] args) {
         new SingleTrialAblationExperiment().run(args);
     }
@@ -531,7 +527,7 @@ public class SingleTrialAblationExperiment {
                     inferredByRepair.put(entry.getKey(), app.inferredAxioms(entry.getValue(), subConcepts));
                 }
 
-                for (var bSpec : repairSpecs()) {
+                for (var bSpec : B_REPAIR_SPECS) {
                     for (var aRepair : A_REPAIRS) {
                         var iicKey = bSpec.id + "_vs_" + aRepair;
                         var iicValue = Ontology.relativeInformationContent(
